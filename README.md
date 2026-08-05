@@ -62,3 +62,17 @@ This repository strictly adheres to a structured development methodology[cite: 1
    ```bash
    git clone [https://github.com/Joel-Freude/Network-Device-Inventory-Manager.git](https://github.com/Joel-Freude/Network-Device-Inventory-Manager.git)
    cd Network-Device-Inventory-Manager
+   
+2. Start the application stack using Docker Compose:
+
+```bash
+docker compose up --build -d```
+
+3. Access the application services:
+
+* Frontend Dashboard: http://localhost:3000
+* FastAPI Interactive Docs (Swagger): http://localhost:8000/docs
+* PostgreSQL Engine: localhost:5432
+
+4. License
+* **Distributed under the MIT License.** 
