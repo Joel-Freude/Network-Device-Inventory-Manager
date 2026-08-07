@@ -5,7 +5,7 @@ An enterprise-grade, single-source-of-truth web application designed for Network
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110.0-009688)
-![Next.js](https://img.shields.io/badge/Next.js-14.1.3-black)
+![Next.js](https://img.shields.io/badge/Next.js-16.3.0-black)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791)
 ![Docker](https://img.shields.io/badge/Docker-WSL2-2496ED)
 
@@ -23,7 +23,7 @@ An enterprise-grade, single-source-of-truth web application designed for Network
 
 ## Tech Stack & Architecture
 
-* **Frontend:** Next.js 14+ (App Router), React, Tailwind CSS, Lucide Icons[cite: 1].
+* **Frontend:** Next.js 16+ (App Router), React, Tailwind CSS, HugeIcons, MADE TOMMY custom fonts[cite: 1].
 * **Backend:** FastAPI, Pydantic v2, SQLAlchemy 2.0 ORM[cite: 1].
 * **Database:** PostgreSQL 16 (Utilizing native `INET` and `MACADDR` column types)[cite: 1].
 * **Infrastructure:** Docker Desktop & WSL2 Ubuntu[cite: 1].
@@ -36,6 +36,33 @@ The application utilizes a relational schema to link network devices to physical
 
 * **`devices`**: Stores `hostname`, `ip_address`, `mac_address`, `device_type`, `vendor`, `model`, `serial_number`, `firmware_version`, `status`, and `location_id`[cite: 1].
 * **`locations`**: Stores `site_name`, `building_rack`, and `description`[cite: 1].
+
+---
+
+## Backend Architecture & Workflows
+
+### Key Execution Steps
+
+**API Routing & Request Processing:** FastAPI handles asynchronous HTTP requests across dedicated endpoint routers (`/api/v1/devices`, `/api/v1/analytics`).
+
+**Input Sanitization & Data Normalization:** Incoming JSON payloads are parsed through Pydantic schemas. Pydantic automatically validates IP address formats, normalizes MAC address strings (e.g., standardizing delimiters), and enforces strict data types before processing.
+
+**Database Abstraction & Transactions:** The application communicates with PostgreSQL via SQLAlchemy 2.0 ORM. It translates Python class operations into SQL queries using native PostgreSQL `INET` and `MACADDR` data types.
+
+**Automated API Documentation:** FastAPI automatically compiles and exposes OpenAPI (Swagger) documentation endpoints, allowing interactive testing of all CRUD routes.
+
+### Primary Request Workflows
+
+**Asset Creation Workflow (POST /api/v1/devices):**
+1. Client sends a JSON payload with device details (hostname, IP address, MAC address, vendor, location ID).
+2. Pydantic validates IP/MAC formats and checks uniqueness constraints (e.g., duplicate IP prevention).
+3. SQLAlchemy maps the model to the devices table and commits the record to PostgreSQL.
+4. Backend returns a 201 Created status with the newly assigned UUID record.
+
+**Analytics Aggregation Workflow (GET /api/v1/analytics/summary):**
+1. Client queries the dashboard analytics endpoint.
+2. SQLAlchemy executes optimized SQL queries to aggregate device counts by vendor, calculate active vs. offline ratios, and check upcoming warranty expiration dates.
+3. Backend returns a 200 OK JSON response containing summary metrics.
 
 ---
 
