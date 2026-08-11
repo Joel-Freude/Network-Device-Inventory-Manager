@@ -23,22 +23,32 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+        print(f"Connection added. Total active connections: {len(self.active_connections)}")
     
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        try:
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
+                print(f"Connection removed. Total active connections: {len(self.active_connections)}")
+        except ValueError:
+            print("Attempted to remove connection that was not in active connections")
     
     async def broadcast(self, message: Dict[str, Any]):
         """Broadcast message to all connected clients."""
+        if not self.active_connections:
+            return
+            
         disconnected = []
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
-            except:
+            except Exception as e:
+                print(f"Error sending to connection: {e}")
                 disconnected.append(connection)
         
         # Remove disconnected clients
         for conn in disconnected:
-            self.active_connections.remove(conn)
+            self.disconnect(conn)
 
 manager = ConnectionManager()
 
@@ -63,10 +73,14 @@ async def generate_mock_metrics(device_id: int, device_type: str) -> Dict[str, A
 
 async def metrics_background_task():
     """Background task to collect and broadcast CPU metrics every 100ms."""
+    print("Starting metrics background task...")
     while True:
         try:
-            # Get all active devices from database
-            async for db in get_db():
+            # Get database session
+            db_gen = get_db()
+            db = await db_gen.__anext__()
+            
+            try:
                 result = await db.execute(
                     select(Device).where(Device.status == DeviceStatus.ACTIVE)
                 )
@@ -77,11 +91,17 @@ async def metrics_background_task():
                     metrics = await generate_mock_metrics(device.id, device.device_type)
                     await manager.broadcast(metrics)
                 
+            except Exception as e:
+                print(f"Error in metrics collection loop: {e}")
+            finally:
                 await db.close()
-                break
+                try:
+                    await db_gen.aclose()
+                except:
+                    pass
                 
         except Exception as e:
-            print(f"Error in metrics collection: {e}")
+            print(f"Error in metrics background task: {e}")
         
         # Wait 100ms before next collection
         await asyncio.sleep(0.1)
@@ -89,20 +109,44 @@ async def metrics_background_task():
 @router.websocket("/ws/cpu-metrics")
 async def websocket_cpu_metrics(websocket: WebSocket):
     """WebSocket endpoint for real-time CPU metrics."""
-    await manager.connect(websocket)
-    
-    # Start background metrics collection if not already running
-    # (In production, use a proper task manager)
+    print(f"New WebSocket connection attempt from {websocket.client}")
     
     try:
-        while True:
-            # Keep connection alive and handle client messages if needed
-            data = await websocket.receive_text()
-            # Echo back or handle client commands
-            await websocket.send_json({"status": "connected", "message": "CPU metrics streaming active"})
+        await websocket.accept()
+        print(f"WebSocket connection accepted for {websocket.client}")
+        
+        # Add to manager
+        manager.active_connections.append(websocket)
+        print(f"Connection added. Total active connections: {len(manager.active_connections)}")
+        
+        # Send initial connection confirmation
+        await websocket.send_json({"status": "connected", "message": "CPU metrics streaming active"})
+        print("Sent initial connection confirmation")
+        
+        try:
+            while True:
+                # Keep connection alive and handle client messages if needed
+                try:
+                    data = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                    print(f"Received message from client: {data}")
+                    # Echo back or handle client commands
+                    await websocket.send_json({"status": "received", "message": data})
+                except asyncio.TimeoutError:
+                    # Send periodic ping to keep connection alive
+                    await websocket.send_json({"type": "ping"})
+                
+        except WebSocketDisconnect:
+            print(f"WebSocket disconnected normally: {websocket.client}")
+            if websocket in manager.active_connections:
+                manager.active_connections.remove(websocket)
+                print(f"Connection removed. Total active connections: {len(manager.active_connections)}")
+        except Exception as e:
+            print(f"WebSocket error during message handling: {e}")
+            if websocket in manager.active_connections:
+                manager.active_connections.remove(websocket)
+                print(f"Connection removed due to error. Total active connections: {len(manager.active_connections)}")
             
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
     except Exception as e:
-        manager.disconnect(websocket)
-        print(f"WebSocket error: {e}")
+        print(f"WebSocket connection error: {e}")
+        if websocket in manager.active_connections:
+            manager.active_connections.remove(websocket)

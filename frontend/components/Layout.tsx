@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { 
   DashboardSpeed01Icon, 
@@ -13,19 +15,20 @@ import {
 
 interface LayoutProps {
   children: React.ReactNode;
-  activeTab: string;
-  onTabChange: (tab: string) => void;
 }
 
 const tabs = [
-  { id: 'dashboard', label: 'Dashboard', icon: DashboardSpeed01Icon },
-  { id: 'inventory', label: 'Inventory', icon: McpServerIcon },
-  { id: 'locations', label: 'Locations', icon: Location01Icon },
-  { id: 'settings', label: 'Settings', icon: Settings01Icon },
+  { id: 'dashboard', label: 'Dashboard', icon: DashboardSpeed01Icon, path: '/dashboard' },
+  { id: 'inventory', label: 'Inventory', icon: McpServerIcon, path: '/inventory' },
+  { id: 'locations', label: 'Locations', icon: Location01Icon, path: '/locations' },
+  { id: 'settings', label: 'Settings', icon: Settings01Icon, path: '/settings' },
 ];
 
-export default function Layout({ children, activeTab, onTabChange }: LayoutProps) {
+export default function Layout({ children }: LayoutProps) {
+  const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const activeTab = tabs.find(tab => pathname === tab.path)?.id || 'dashboard';
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-black via-green-950 to-black">
@@ -39,9 +42,9 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
-              <button
+              <Link
                 key={tab.id}
-                onClick={() => onTabChange(tab.id)}
+                href={tab.path}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${
                   activeTab === tab.id
                     ? 'bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-500 shadow-lg shadow-green-500/20'
@@ -50,7 +53,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               >
                 <HugeiconsIcon icon={tab.icon} className="w-5 h-5" />
                 <span className="font-medium font-mono">{tab.label}</span>
-              </button>
+              </Link>
             );
           })}
         </nav>
@@ -88,12 +91,10 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
-              <button
+              <Link
                 key={tab.id}
-                onClick={() => {
-                  onTabChange(tab.id);
-                  setMobileMenuOpen(false);
-                }}
+                href={tab.path}
+                onClick={() => setMobileMenuOpen(false)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${
                   activeTab === tab.id
                     ? 'bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-500 shadow-lg shadow-green-500/20'
@@ -102,7 +103,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               >
                 <HugeiconsIcon icon={tab.icon} className="w-5 h-5" />
                 <span className="font-medium font-mono">{tab.label}</span>
-              </button>
+              </Link>
             );
           })}
         </div>
@@ -121,9 +122,9 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
-              <button
+              <Link
                 key={tab.id}
-                onClick={() => onTabChange(tab.id)}
+                href={tab.path}
                 className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all duration-300 ${
                   activeTab === tab.id
                     ? 'text-green-500'
@@ -132,7 +133,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               >
                 <HugeiconsIcon icon={tab.icon} className="w-5 h-5" />
                 <span className="text-xs font-medium font-mono">{tab.label}</span>
-              </button>
+              </Link>
             );
           })}
         </div>

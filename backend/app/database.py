@@ -1,6 +1,10 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
+from dotenv import load_dotenv
+
+# Load .env file explicitly to ensure environment variables are available
+load_dotenv()
 
 # Remove SSL parameters from URL for asyncpg
 database_url = settings.database_url.split("?")[0]

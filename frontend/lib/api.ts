@@ -21,6 +21,8 @@ export interface Location {
   site_name: string;
   building_rack: string;
   description?: string;
+  latitude?: number;
+  longitude?: number;
   created_at: string;
   updated_at: string;
 }
@@ -50,6 +52,11 @@ class ApiClient {
 
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    
+    if (typeof fetch === 'undefined') {
+      throw new Error('fetch is not available. This API client must be used in a client component.');
+    }
+    
     const response = await fetch(url, {
       ...options,
       headers: {

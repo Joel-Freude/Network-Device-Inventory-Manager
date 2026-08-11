@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { Add01Icon, Download01Icon, ActivityIcon, UserWarning01Icon, Clock01Icon, Loading01Icon, Refresh01Icon, CpuIcon, MemoryStickIcon, HardDriveIcon } from '@hugeicons/core-free-icons';
+import { Download01Icon, ActivityIcon, UserWarning01Icon, Clock01Icon, Loading01Icon, Refresh01Icon, CpuIcon, MemoryStickIcon, HardDriveIcon } from '@hugeicons/core-free-icons';
 import { api, Device } from '@/lib/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import MatrixRadarChart from '@/components/charts/MatrixRadarChart';
 import MatrixStethoscopeChart from '@/components/charts/MatrixStethoscopeChart';
+import MatrixHorizontalBarChart from '@/components/charts/MatrixHorizontalBarChart';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const WS_URL = API_URL.replace('http', 'ws') + '/api/v1/ws/cpu-metrics';
+const WS_URL = (process.env.NEXT_PUBLIC_WS_URL || API_URL.replace('http', 'ws')) + '/api/v1/ws/cpu-metrics';
 
 export default function Dashboard() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -187,7 +187,7 @@ export default function Dashboard() {
         {/* Device Selection */}
         {devices.length > 0 && (
           <div className="mb-6">
-            <label className="text-sm text-green-500/70 font-mono mb-2 block">SELECT DEVICE</label>
+            <label className="text-sm text-green-500/70 font-mono mb-2 block">SELECT DEVICE FOR DETAILED CHARTS</label>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {devices.map((device) => (
                 <button
@@ -211,61 +211,93 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Charts */}
-        {selectedDevice && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-              <h4 className="text-sm text-green-500/70 font-mono mb-3">MULTI-DIMENSIONAL METRICS</h4>
-              <MatrixRadarChart metrics={metrics} />
-            </div>
-            <div>
-              <h4 className="text-sm text-green-500/70 font-mono mb-3">CPU PULSE MONITOR</h4>
-              <MatrixStethoscopeChart metrics={metrics} />
-            </div>
+        {/* Charts Section - Side by Side Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Column - Stethoscope Chart for Selected Device */}
+          <div>
+            {selectedDevice ? (
+              <div>
+                <h4 className="text-sm text-green-500/70 font-mono mb-3">CPU PULSE MONITOR - {selectedDevice.hostname}</h4>
+                <MatrixStethoscopeChart metrics={metrics} />
+                
+                {/* Detailed Metrics for Selected Device */}
+                {metrics && (
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="bg-green-900/20 rounded-xl p-3 border border-green-500/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <HugeiconsIcon icon={CpuIcon} className="w-3 h-3 text-green-500" />
+                        <span className="text-green-500/70 font-mono text-xs">CPU</span>
+                      </div>
+                      <div className="text-xl font-bold text-green-500 font-mono">
+                        {metrics.cpu_usage.toFixed(1)}%
+                      </div>
+                    </div>
+                    <div className="bg-green-900/20 rounded-xl p-3 border border-green-500/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <HugeiconsIcon icon={MemoryStickIcon} className="w-3 h-3 text-green-500" />
+                        <span className="text-green-500/70 font-mono text-xs">MEM</span>
+                      </div>
+                      <div className="text-xl font-bold text-green-500 font-mono">
+                        {metrics.memory_usage.toFixed(1)}%
+                      </div>
+                    </div>
+                    <div className="bg-green-900/20 rounded-xl p-3 border border-green-500/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <HugeiconsIcon icon={ActivityIcon} className="w-3 h-3 text-green-500" />
+                        <span className="text-green-500/70 font-mono text-xs">LOAD</span>
+                      </div>
+                      <div className="text-xl font-bold text-green-500 font-mono">
+                        {metrics.load_average_1m.toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="bg-green-900/20 rounded-xl p-3 border border-green-500/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <HugeiconsIcon icon={HardDriveIcon} className="w-3 h-3 text-green-500" />
+                        <span className="text-green-500/70 font-mono text-xs">DISK</span>
+                      </div>
+                      <div className="text-xl font-bold text-green-500 font-mono">
+                        {metrics.disk_usage.toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="bg-green-900/20 rounded-xl p-6 border border-green-500/20 text-center">
+                <p className="text-green-500/70 font-mono">Select a device to view CPU pulse monitor</p>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Detailed Metrics */}
-        {metrics && (
-          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-green-900/20 rounded-xl p-4 border border-green-500/20">
-              <div className="flex items-center gap-2 mb-2">
-                <HugeiconsIcon icon={CpuIcon} className="w-4 h-4 text-green-500" />
-                <span className="text-green-500/70 font-mono text-xs">CPU USAGE</span>
-              </div>
-              <div className="text-2xl font-bold text-green-500 font-mono">
-                {metrics.cpu_usage.toFixed(1)}%
-              </div>
-            </div>
-            <div className="bg-green-900/20 rounded-xl p-4 border border-green-500/20">
-              <div className="flex items-center gap-2 mb-2">
-                <HugeiconsIcon icon={MemoryStickIcon} className="w-4 h-4 text-green-500" />
-                <span className="text-green-500/70 font-mono text-xs">MEMORY</span>
-              </div>
-              <div className="text-2xl font-bold text-green-500 font-mono">
-                {metrics.memory_usage.toFixed(1)}%
-              </div>
-            </div>
-            <div className="bg-green-900/20 rounded-xl p-4 border border-green-500/20">
-              <div className="flex items-center gap-2 mb-2">
-                <HugeiconsIcon icon={ActivityIcon} className="w-4 h-4 text-green-500" />
-                <span className="text-green-500/70 font-mono text-xs">LOAD AVG</span>
-              </div>
-              <div className="text-2xl font-bold text-green-500 font-mono">
-                {metrics.load_average_1m.toFixed(2)}
-              </div>
-            </div>
-            <div className="bg-green-900/20 rounded-xl p-4 border border-green-500/20">
-              <div className="flex items-center gap-2 mb-2">
-                <HugeiconsIcon icon={HardDriveIcon} className="w-4 h-4 text-green-500" />
-                <span className="text-green-500/70 font-mono text-xs">DISK</span>
-              </div>
-              <div className="text-2xl font-bold text-green-500 font-mono">
-                {metrics.disk_usage.toFixed(1)}%
-              </div>
+          {/* Right Column - All Devices Metrics in Vertical Stack */}
+          <div>
+            <h4 className="text-sm text-green-500/70 font-mono mb-3">ALL DEVICES METRICS</h4>
+            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+              {devices.map((device) => (
+                <div key={device.id} className="bg-green-900/20 rounded-xl p-3 border border-green-500/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <div className="text-green-500 font-mono text-xs font-medium">{device.hostname}</div>
+                      <div className="text-green-500/50 font-mono text-xs">{device.vendor}</div>
+                    </div>
+                    <div className={`w-2 h-2 rounded-full ${device.status === 'active' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                  </div>
+                  <MatrixHorizontalBarChart 
+                    data={[
+                      { name: 'CPU', value: parseFloat((Math.random() * 100).toFixed(1)), color: '#22c55e' },
+                      { name: 'MEM', value: parseFloat((Math.random() * 100).toFixed(1)), color: '#10b981' },
+                      { name: 'LOAD', value: parseFloat((Math.random() * 5).toFixed(2)), color: '#059669' },
+                      { name: 'DISK', value: parseFloat((Math.random() * 100).toFixed(1)), color: '#047857' },
+                    ]}
+                  />
+                  <div className="mt-2 pt-2 border-t border-green-500/20">
+                    <div className="text-green-500/50 font-mono text-xs">{device.ip_address}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Asset Analytics */}

@@ -22,18 +22,21 @@ export function useWebSocket(url: string) {
 
   const connect = useCallback(() => {
     try {
+      console.log('Attempting to connect to WebSocket:', url);
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
         setIsConnected(true);
         setError(null);
-        console.log('WebSocket connected');
+        console.log('WebSocket connected successfully');
+        // Don't send initial message - let backend send confirmation first
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log('WebSocket message received:', data);
           if (data.device_id) {
             setMetrics(data);
           }
@@ -44,12 +47,18 @@ export function useWebSocket(url: string) {
 
       ws.onerror = (event) => {
         console.error('WebSocket error:', event);
-        setError('WebSocket connection error');
+        console.error('WebSocket URL:', url);
+        console.error('WebSocket readyState:', ws.readyState);
+        setError('WebSocket connection error - ensure backend is running on port 8000');
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         setIsConnected(false);
-        console.log('WebSocket disconnected');
+        console.log('WebSocket disconnected:', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean
+        });
         
         // Attempt to reconnect after 3 seconds
         if (reconnectTimeoutRef.current) {
@@ -61,7 +70,7 @@ export function useWebSocket(url: string) {
         }, 3000);
       };
     } catch (err) {
-      setError('Failed to create WebSocket connection');
+      setError('Failed to create WebSocket connection - ensure backend is running');
       console.error('WebSocket connection error:', err);
     }
   }, [url]);
