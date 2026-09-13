@@ -1,45 +1,47 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@import 'maplibre-gl/dist/maplibre-gl.css';
-
+/* ------------------------------------------------------------------ */
+/* Globe HUD design tokens                                             */
+/* Tokens only — @tailwind directives, the maplibre-gl.css import, and */
+/* the body background/font all live in globals.css. Declaring them    */
+/* here too was fighting globals.css for the cascade (silently losing, */
+/* since this file loads after it) and doubling Tailwind's output.     */
+/* ------------------------------------------------------------------ */
 :root {
+  /* Surface */
   --bg-void: #05070a;
   --bg-panel: rgba(10, 14, 18, 0.72);
   --bg-panel-solid: #0b0f13;
-  --border-hairline: rgba(212, 175, 55, 0.28);
-  --border-hairline-strong: rgba(212, 175, 55, 0.55);
-  --accent-gold: #d4af37;
-  --accent-gold-dim: rgba(212, 175, 55, 0.6);
-  --accent-cyan: #4fd8e8;
-  --accent-green: #3ecf8e;
+  --border-hairline: rgba(0, 212, 255, 0.28);
+  --border-hairline-strong: rgba(0, 212, 255, 0.55);
+
+  /* Accent */
+  --accent-gold: #00d4ff;
+  --accent-gold-dim: rgba(0, 212, 255, 0.6);
+  --accent-cyan: #00d4ff;
+  --accent-green: #00ff9d;
   --accent-orange: #ff9f43;
   --accent-red: #ff4757;
+
+  /* Rail / chrome surfaces */
   --bg-rail: rgba(8, 11, 14, 0.85);
+
+  /* Text */
   --text-primary: #e8e6de;
   --text-muted: #7b828c;
   --text-faint: #4a4f57;
+
+  /* Type */
   --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
   --font-data: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+  /* Motion */
   --ease-hud: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-body {
-  margin: 0;
-  background: var(--bg-void);
-  color: var(--text-primary);
-  font-family: var(--font-ui);
-}
-
-.maplibregl-map {
-  position: absolute;
-  inset: 0;
-}
-
+/* ------------------------------------------------------------------ */
+/* Panels                                                              */
+/* ------------------------------------------------------------------ */
 .hud-panel {
   background: var(--bg-panel);
-  border: 1px solid var(--border-hairline);
   backdrop-filter: blur(8px);
   font-family: var(--font-ui);
   color: var(--text-primary);
@@ -60,16 +62,19 @@ body {
 .hud-viewport::before {
   top: 12px;
   left: 12px;
-  border-top: 1.5px solid var(--border-hairline-strong);
-  border-left: 1.5px solid var(--border-hairline-strong);
+  border-top: 1.5px solid transparent;
+  border-left: 1.5px solid transparent;
 }
 .hud-viewport::after {
   bottom: 12px;
   right: 12px;
-  border-bottom: 1.5px solid var(--border-hairline-strong);
-  border-right: 1.5px solid var(--border-hairline-strong);
+  border-bottom: 1.5px solid transparent;
+  border-right: 1.5px solid transparent;
 }
 
+/* ------------------------------------------------------------------ */
+/* Controls                                                             */
+/* ------------------------------------------------------------------ */
 .hud-button {
   font-family: var(--font-ui);
   font-size: 13px;
@@ -87,10 +92,7 @@ body {
   border-color: var(--border-hairline-strong);
   color: var(--accent-gold);
 }
-.hud-button:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
+.hud-button:disabled { opacity: 0.35; cursor: default; }
 .hud-button[data-active='true'] {
   border-color: var(--accent-gold);
   color: var(--accent-gold);
@@ -102,32 +104,36 @@ body {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
-.hud-data--live {
-  color: var(--accent-cyan);
-}
+.hud-data--live { color: var(--accent-cyan); }
 
 .hud-status-dot {
   display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent-green);
+  background: var(--accent-cyan);
 }
-.hud-status-dot--live {
-  animation: hud-pulse 2s ease-in-out infinite;
-}
+.hud-status-dot--live { animation: hud-pulse 2s ease-in-out infinite; }
 @keyframes hud-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(62, 207, 142, 0.5); }
-  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(62, 207, 142, 0); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.5); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(0, 212, 255, 0); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .hud-status-dot--live { animation: none; }
+  .hud-button { transition: none; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Icon rail                                                            */
+/* ------------------------------------------------------------------ */
 .hud-rail {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  background: var(--bg-rail);
-  border-right: 1px solid var(--border-hairline);
+  background: transparent;
+  border-right: none;
   padding: 10px 0;
 }
 .hud-rail-btn {
@@ -144,14 +150,8 @@ body {
   cursor: pointer;
   transition: color 140ms var(--ease-hud), background 140ms var(--ease-hud);
 }
-.hud-rail-btn:hover {
-  color: var(--text-primary);
-  background: rgba(212, 175, 55, 0.08);
-}
-.hud-rail-btn[data-active='true'] {
-  color: var(--accent-gold);
-  background: rgba(212, 175, 55, 0.12);
-}
+.hud-rail-btn:hover { color: var(--text-primary); background: rgba(0, 212, 255, 0.08); }
+.hud-rail-btn[data-active='true'] { color: var(--accent-gold); background: rgba(0, 212, 255, 0.12); }
 .hud-rail-badge {
   position: absolute;
   top: 4px;
@@ -161,7 +161,7 @@ body {
   padding: 0 3px;
   border-radius: 7px;
   background: var(--accent-cyan);
-  color: #05070a;
+  color: #0a0a0f;
   font-family: var(--font-data);
   font-size: 9px;
   font-weight: 700;
@@ -169,13 +169,17 @@ body {
   text-align: center;
 }
 
+/* ------------------------------------------------------------------ */
+/* Segmented projection/style control                                  */
+/* ------------------------------------------------------------------ */
 .hud-segmented {
   display: inline-flex;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-hairline);
+  background: rgba(10, 14, 18, 0.85);
+  border: 1px solid rgba(0, 212, 255, 0.35);
   border-radius: 8px;
   padding: 3px;
   gap: 2px;
+  backdrop-filter: blur(8px);
 }
 .hud-segment {
   display: flex;
@@ -193,10 +197,11 @@ body {
   cursor: pointer;
   transition: color 140ms var(--ease-hud), background 140ms var(--ease-hud);
 }
-.hud-segment:hover { color: var(--text-primary); }
+.hud-segment:hover { color: var(--text-primary); background: rgba(0, 212, 255, 0.08); }
 .hud-segment[data-active='true'] {
-  color: var(--accent-gold);
-  background: rgba(212, 175, 55, 0.12);
+  color: #0a0a0f;
+  background: rgba(0, 212, 255, 0.9);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.35);
 }
 
 .hud-scalebar {
@@ -227,12 +232,18 @@ body {
   color: var(--text-muted);
   white-space: nowrap;
 }
-.hud-cursorbar b {
-  color: var(--text-primary);
-  font-weight: 600;
-}
+.hud-cursorbar b { color: var(--text-primary); font-weight: 600; }
 
-@media (prefers-reduced-motion: reduce) {
-  .hud-status-dot--live { animation: none; }
-  .hud-button { transition: none; }
+/* ------------------------------------------------------------------ */
+/* Device markers + popup                                              */
+/* ------------------------------------------------------------------ */
+.device-popup .maplibregl-popup-content {
+  background: var(--bg-panel-solid);
+  border: 1px solid var(--border-hairline-strong);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-size: 12px;
+  padding: 10px 12px;
 }
+.device-popup .maplibregl-popup-tip { border-top-color: var(--border-hairline-strong); }

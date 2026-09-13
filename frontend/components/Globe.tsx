@@ -1,20 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import maplibregl from 'maplibre-gl';
+import Map, { MapRef, NavigationControl } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '@/styles/theme.css';
-import { setMapProjection, type ProjectionMode } from '@/lib/map-projection';
-import { nightHemisphereGeoJSON } from '@/lib/day-night-terminator';
-import { computeScaleBar } from '@/lib/scale-bar';
-import IconRail from '@/components/IconRail';
+import type { FeatureCollection, Feature, Point, LineString } from 'geojson';
 
-const NIGHT_SOURCE_ID = 'night-hemisphere';
-const NIGHT_LAYER_ID = 'night-hemisphere-fill';
+const VECTOR_STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
-const VECTOR_STYLE_URL = 'https://demotiles.maplibre.org/style.json';
-
-const SATELLITE_STYLE: maplibregl.StyleSpecification = {
+const SATELLITE_STYLE: any = {
   version: 8,
   sources: {
     esri: {
@@ -27,7 +21,113 @@ const SATELLITE_STYLE: maplibregl.StyleSpecification = {
   layers: [{ id: 'esri-imagery', type: 'raster', source: 'esri' }],
 };
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+
 type BaseStyle = 'map' | 'sat';
+type ProjectionMode = 'globe' | 'mercator';
+
+interface Device {
+  id: string;
+  hostname: string;
+  ip: string;
+  vendor: string;
+  model: string;
+  site: string;
+  lat: number;
+  lng: number;
+  status: 'online' | 'warning' | 'offline';
+}
+
+const STATUS_COLOR: Record<Device['status'], string> = {
+  online: '#00ff9d',
+  warning: '#ff9f43',
+  offline: '#ff4757',
+};
+
+const DEFAULT_DEVICES: Device[] = [
+  { id: '1', hostname: 'router-01', ip: '10.0.0.1', vendor: 'Cisco', model: 'ISR 4000', site: 'New York', lat: 40.7128, lng: -74.006, status: 'online' },
+  { id: '2', hostname: 'switch-02', ip: '10.0.1.1', vendor: 'Juniper', model: 'EX4300', site: 'London', lat: 51.5074, lng: -0.1278, status: 'online' },
+  { id: '3', hostname: 'firewall-01', ip: '10.0.2.1', vendor: 'Palo Alto', model: 'PA-5200', site: 'Tokyo', lat: 35.6762, lng: 139.6503, status: 'warning' },
+  { id: '4', hostname: 'server-01', ip: '10.0.3.1', vendor: 'Dell', model: 'PowerEdge', site: 'Sydney', lat: -33.8688, lng: 151.2093, status: 'online' },
+  { id: '5', hostname: 'ap-01', ip: '10.0.4.1', vendor: 'Ubiquiti', model: 'U6 Pro', site: 'Paris', lat: 48.8566, lng: 2.3522, status: 'offline' },
+  { id: '6', hostname: 'router-02', ip: '10.0.5.1', vendor: 'Cisco', model: 'ISR 4000', site: 'Berlin', lat: 52.52, lng: 13.405, status: 'online' },
+];
+
+function devicesToGeoJSON(devices: Device[]): FeatureCollection<Point, Device> {
+  return {
+    type: 'FeatureCollection',
+    features: devices.map((d) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [d.lng, d.lat] },
+      properties: d,
+    })),
+  };
+}
+
+function arcsToGeoJSON(devices: Device[]): FeatureCollection<LineString> {
+  const features: Feature<LineString>[] = [];
+  const online = devices.filter((d) => d.status === 'online');
+  for (let i = 0; i < online.length; i++) {
+    for (let j = i + 1; j < online.length; j++) {
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [online[i].lng, online[i].lat],
+            [online[j].lng, online[j].lat],
+          ],
+        },
+        properties: {},
+      });
+    }
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+function nightHemisphereGeoJSON(): FeatureCollection<Point> {
+  const now = new Date();
+  const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
+  const hour = now.getUTCHours() + now.getUTCMinutes() / 60;
+  const features: Feature<Point>[] = [];
+  const steps = 72;
+  for (let i = 0; i <= steps; i++) {
+    const lng = -180 + (360 * i) / steps;
+    const lat = 23.44 * Math.sin(((dayOfYear - 81) / 365) * 2 * Math.PI) * Math.cos((hour / 12) * Math.PI);
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [lng, lat] },
+      properties: {},
+    });
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+function computeScaleBar(zoom: number, lat: number): { widthPx: number; label: string } {
+  const circumference = 40075017;
+  const metersPerPx = (circumference * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom + 8);
+  const targetMeters = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000].find(
+    (m) => m / metersPerPx >= 60
+  ) || 1000000;
+  return {
+    widthPx: Math.max(40, Math.min(160, targetMeters / metersPerPx)),
+    label: targetMeters >= 1000 ? `${targetMeters / 1000} km` : `${targetMeters} m`,
+  };
+}
+
+function setMapProjection(map: any, mode: ProjectionMode) {
+  if (!map || typeof map.setProjection !== 'function') return;
+
+  if (mode === 'globe') {
+    map.setProjection({ type: 'globe' });
+    map.setPitch(40);
+    map.setBearing(0);
+  } else {
+    map.setProjection({ type: 'mercator' });
+    map.setPitch(0);
+    map.setBearing(0);
+  }
+}
 
 interface GlobeMapProps {
   initialProjection?: ProjectionMode;
@@ -40,73 +140,35 @@ export default function GlobeMap({
   showDayNight = true,
   onProjectionChange,
 }: GlobeMapProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapRef = useRef<MapRef>(null);
   const [ready, setReady] = useState(false);
   const [projection, setProjection] = useState<ProjectionMode>(initialProjection);
   const [baseStyle, setBaseStyle] = useState<BaseStyle>('map');
   const [view, setView] = useState({ lat: 20, lng: 0, zoom: 1.5 });
   const [cursor, setCursor] = useState<{ lat: number; lng: number } | null>(null);
-
-  const attachNightLayer = useCallback((map: maplibregl.Map) => {
-    if (!showDayNight || map.getSource(NIGHT_SOURCE_ID)) return;
-    map.addSource(NIGHT_SOURCE_ID, { type: 'geojson', data: nightHemisphereGeoJSON() });
-    map.addLayer({
-      id: NIGHT_LAYER_ID,
-      type: 'fill',
-      source: NIGHT_SOURCE_ID,
-      paint: { 'fill-color': '#000015', 'fill-opacity': 0.35 },
-    });
-  }, [showDayNight]);
+  const [devices, setDevices] = useState<Device[]>(DEFAULT_DEVICES);
+  const [devicesError, setDevicesError] = useState(false);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    let cancelled = false;
+    fetch(`${API_URL}/api/devices`)
+      .then((res) => res.json())
+      .then((data) => { if (!cancelled) setDevices(data.devices ?? []); })
+      .catch(() => { if (!cancelled) setDevicesError(true); });
+    return () => { cancelled = true; };
+  }, []);
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: VECTOR_STYLE_URL,
-      center: [0, 20],
-      zoom: 1.5,
-      pitch: 0,
-      antialias: true,
-    });
-
-    map.on('move', () => {
-      const c = map.getCenter();
-      setView({ lat: c.lat, lng: c.lng, zoom: map.getZoom() });
-    });
-    map.on('mousemove', (e) => setCursor({ lat: e.lngLat.lat, lng: e.lngLat.lng }));
-    map.on('mouseout', () => setCursor(null));
-
-    map.on('load', () => {
-      setMapProjection(map, initialProjection);
-      attachNightLayer(map);
-      setReady(true);
-    });
-
-    mapRef.current = map;
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
-  }, [initialProjection, attachNightLayer]);
-
-  useEffect(() => {
-    if (!ready || !showDayNight) return;
-    const map = mapRef.current;
-    if (!map) return;
-    const tick = () => {
-      const source = map.getSource(NIGHT_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-      source?.setData(nightHemisphereGeoJSON());
-    };
-    const id = setInterval(tick, 60_000);
-    return () => clearInterval(id);
-  }, [ready, showDayNight]);
+  const handleMove = useCallback((evt: any) => {
+    const vs = evt.viewState || evt;
+    if (vs && typeof vs.latitude === 'number') {
+      setView({ lat: vs.latitude, lng: vs.longitude, zoom: vs.zoom });
+    }
+  }, []);
 
   const toggleProjection = useCallback((mode: ProjectionMode) => {
     const map = mapRef.current;
     if (!map || mode === projection) return;
-    setMapProjection(map, mode);
+    setMapProjection(map.getMap(), mode);
     setProjection(mode);
     onProjectionChange?.(mode);
   }, [projection, onProjectionChange]);
@@ -115,21 +177,36 @@ export default function GlobeMap({
     const map = mapRef.current;
     if (!map || next === baseStyle) return;
     setBaseStyle(next);
-    map.setStyle(next === 'map' ? VECTOR_STYLE_URL : SATELLITE_STYLE);
-    map.once('style.load', () => {
-      setMapProjection(map, projection);
-      attachNightLayer(map);
-    });
-  }, [baseStyle, projection, attachNightLayer]);
+    const inner = map.getMap();
+    if (inner && typeof inner.setStyle === 'function') {
+      inner.setStyle(next === 'map' ? VECTOR_STYLE_URL : SATELLITE_STYLE);
+    }
+  }, [baseStyle]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current;
+    if (!map) return;
+    setMapProjection(map.getMap(), initialProjection);
+  }, [ready, initialProjection]);
 
   const scaleBar = computeScaleBar(view.zoom, view.lat);
+  const onlineCount = devices.filter((d) => d.status === 'online').length;
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: 'var(--bg-void)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ position: 'relative', flex: 1 }} className="hud-viewport">
-        <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-
-        <IconRail />
+        <Map
+          ref={mapRef}
+          initialViewState={{ latitude: 25, longitude: 10, zoom: 2 }}
+          style={{ width: '100%', height: '100%' }}
+          mapStyle={VECTOR_STYLE_URL}
+          onMove={handleMove}
+          onLoad={() => setReady(true)}
+          reuseMaps
+        >
+          <NavigationControl position="bottom-right" />
+        </Map>
 
         <div
           className="hud-panel"
@@ -140,7 +217,7 @@ export default function GlobeMap({
           }}
         >
           <span className={`hud-status-dot ${ready ? 'hud-status-dot--live' : ''}`} />
-          {ready ? 'LIVE' : 'CONNECTING'}
+          {devicesError ? 'API OFFLINE' : `${devices.length} DEVICES · ${onlineCount} ONLINE`}
         </div>
 
         <div style={{ position: 'absolute', bottom: 14, left: 52, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 6 }}>
