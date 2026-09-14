@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import Map, { MapRef, NavigationControl } from 'react-map-gl/maplibre';
+import Map, { MapRef, NavigationControl, Source, Layer } from 'react-map-gl/maplibre';
+import { MapboxOverlay } from '@deck.gl/mapbox';
+import { ArcLayer } from 'deck.gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '@/styles/theme.css';
 import type { FeatureCollection, Feature, Point, LineString } from 'geojson';
@@ -45,13 +47,16 @@ const STATUS_COLOR: Record<Device['status'], string> = {
 };
 
 const DEFAULT_DEVICES: Device[] = [
-  { id: '1', hostname: 'router-01', ip: '10.0.0.1', vendor: 'Cisco', model: 'ISR 4000', site: 'New York', lat: 40.7128, lng: -74.006, status: 'online' },
+  { id: '1', hostname: 'nyc-dc-01', ip: '10.0.0.1', vendor: 'AWS', model: 'DC-01', site: 'New York Data Center', lat: 40.7128, lng: -74.006, status: 'online' },
   { id: '2', hostname: 'switch-02', ip: '10.0.1.1', vendor: 'Juniper', model: 'EX4300', site: 'London', lat: 51.5074, lng: -0.1278, status: 'online' },
   { id: '3', hostname: 'firewall-01', ip: '10.0.2.1', vendor: 'Palo Alto', model: 'PA-5200', site: 'Tokyo', lat: 35.6762, lng: 139.6503, status: 'warning' },
   { id: '4', hostname: 'server-01', ip: '10.0.3.1', vendor: 'Dell', model: 'PowerEdge', site: 'Sydney', lat: -33.8688, lng: 151.2093, status: 'online' },
   { id: '5', hostname: 'ap-01', ip: '10.0.4.1', vendor: 'Ubiquiti', model: 'U6 Pro', site: 'Paris', lat: 48.8566, lng: 2.3522, status: 'offline' },
   { id: '6', hostname: 'router-02', ip: '10.0.5.1', vendor: 'Cisco', model: 'ISR 4000', site: 'Berlin', lat: 52.52, lng: 13.405, status: 'online' },
 ];
+
+const DATA_CENTER_IDS = new Set(['1', 'dev-002']);
+const CONNECTED_SITE_IDS = new Set(['2', '3', '4', '5', '6', 'dev-001', 'dev-003', 'dev-004', 'dev-005', 'dev-006', 'dev-007']);
 
 function devicesToGeoJSON(devices: Device[]): FeatureCollection<Point, Device> {
   return {
@@ -66,23 +71,34 @@ function devicesToGeoJSON(devices: Device[]): FeatureCollection<Point, Device> {
 
 function arcsToGeoJSON(devices: Device[]): FeatureCollection<LineString> {
   const features: Feature<LineString>[] = [];
-  const online = devices.filter((d) => d.status === 'online');
-  for (let i = 0; i < online.length; i++) {
-    for (let j = i + 1; j < online.length; j++) {
-      features.push({
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: [
-            [online[i].lng, online[i].lat],
-            [online[j].lng, online[j].lat],
-          ],
-        },
-        properties: {},
-      });
-    }
+  const dc = devices.find((d) => DATA_CENTER_IDS.has(d.id));
+  if (!dc) return { type: 'FeatureCollection', features };
+
+  const connected = devices.filter((d) => CONNECTED_SITE_IDS.has(d.id));
+  for (const site of connected) {
+    features.push({
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [dc.lng, dc.lat],
+          [site.lng, site.lat],
+        ],
+      },
+      properties: {},
+    });
   }
   return { type: 'FeatureCollection', features };
+}
+
+function arcsToDeckGL(devices: Device[]) {
+  const dc = devices.find((d) => DATA_CENTER_IDS.has(d.id));
+  if (!dc) return [];
+  const connected = devices.filter((d) => CONNECTED_SITE_IDS.has(d.id));
+  return connected.map((site) => ({
+    source: [dc.lng, dc.lat],
+    target: [site.lng, site.lat],
+  }));
 }
 
 function nightHemisphereGeoJSON(): FeatureCollection<Point> {
@@ -120,10 +136,10 @@ function setMapProjection(map: any, mode: ProjectionMode) {
 
   if (mode === 'globe') {
     map.setProjection({ type: 'globe' });
-    map.setPitch(40);
+    map.setPitch(-10);
     map.setBearing(0);
   } else {
-    map.setProjection({ type: 'mercator' });
+    map.setProjection({ type: 'globe' });
     map.setPitch(0);
     map.setBearing(0);
   }
@@ -141,10 +157,11 @@ export default function GlobeMap({
   onProjectionChange,
 }: GlobeMapProps) {
   const mapRef = useRef<MapRef>(null);
+  const overlayRef = useRef<MapboxOverlay | null>(null);
   const [ready, setReady] = useState(false);
   const [projection, setProjection] = useState<ProjectionMode>(initialProjection);
   const [baseStyle, setBaseStyle] = useState<BaseStyle>('map');
-  const [view, setView] = useState({ lat: 20, lng: 0, zoom: 1.5 });
+  const [view, setView] = useState({ lat: 0, lng: 20, zoom: 3 });
   const [cursor, setCursor] = useState<{ lat: number; lng: number } | null>(null);
   const [devices, setDevices] = useState<Device[]>(DEFAULT_DEVICES);
   const [devicesError, setDevicesError] = useState(false);
@@ -188,7 +205,32 @@ export default function GlobeMap({
     const map = mapRef.current;
     if (!map) return;
     setMapProjection(map.getMap(), initialProjection);
+
+    if (!overlayRef.current) {
+      const overlay = new MapboxOverlay({ layers: [] });
+      map.getMap().addControl(overlay);
+      overlayRef.current = overlay;
+    }
   }, [ready, initialProjection]);
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    overlay.setProps({
+      layers: [
+        new ArcLayer({
+          id: 'arcs-3d',
+          data: arcsToDeckGL(devices),
+          getSourcePosition: (d: any) => d.source,
+          getTargetPosition: (d: any) => d.target,
+          getWidth: 6,
+          getSourceColor: [0, 212, 255],
+          getTargetColor: [0, 212, 255],
+          getHeight: 2,
+        }),
+      ],
+    });
+  }, [devices]);
 
   const scaleBar = computeScaleBar(view.zoom, view.lat);
   const onlineCount = devices.filter((d) => d.status === 'online').length;
@@ -198,7 +240,7 @@ export default function GlobeMap({
       <div style={{ position: 'relative', flex: 1 }} className="hud-viewport">
         <Map
           ref={mapRef}
-          initialViewState={{ latitude: 25, longitude: 10, zoom: 2 }}
+          initialViewState={{ latitude: 0, longitude: 20, zoom: 3 }}
           style={{ width: '100%', height: '100%' }}
           mapStyle={VECTOR_STYLE_URL}
           onMove={handleMove}
@@ -206,6 +248,36 @@ export default function GlobeMap({
           reuseMaps
         >
           <NavigationControl position="bottom-right" />
+
+          <Source id="devices" type="geojson" data={devicesToGeoJSON(devices)}>
+            <Layer
+              id="devices-circle"
+              type="circle"
+              paint={{
+                'circle-radius': [
+                  'case',
+                  ['==', ['get', 'site'], 'New York Data Center'],
+                  14,
+                  8,
+                ],
+                'circle-color': [
+                  'case',
+                  ['==', ['get', 'site'], 'New York Data Center'],
+                  '#ff4757',
+                  ['==', ['get', 'status'], 'online'],
+                  STATUS_COLOR.online,
+                  ['==', ['get', 'status'], 'warning'],
+                  STATUS_COLOR.warning,
+                  ['==', ['get', 'status'], 'offline'],
+                  STATUS_COLOR.offline,
+                  '#00ff9d',
+                ],
+                'circle-stroke-width': 2,
+                'circle-stroke-color': '#0a0a0f',
+                'circle-opacity': 0.95,
+              }}
+            />
+          </Source>
         </Map>
 
         <div
