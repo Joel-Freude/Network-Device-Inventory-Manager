@@ -234,6 +234,12 @@
 }
 .hud-cursorbar b { color: var(--text-primary); font-weight: 600; }
 
+.performance-scroll::-webkit-scrollbar { width: 6px; }
+.performance-scroll::-webkit-scrollbar-track { background: rgba(0, 212, 255, 0.05); border-radius: 3px; }
+.performance-scroll::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.25); border-radius: 3px; }
+.performance-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0, 212, 255, 0.45); }
+.performance-scroll { scrollbar-width: thin; scrollbar-color: rgba(0, 212, 255, 0.25) rgba(0, 212, 255, 0.05); }
+
 /* ------------------------------------------------------------------ */
 /* Device markers + popup                                              */
 /* ------------------------------------------------------------------ */

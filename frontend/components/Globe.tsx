@@ -91,6 +91,46 @@ function arcsToGeoJSON(devices: Device[]): FeatureCollection<LineString> {
   return { type: 'FeatureCollection', features };
 }
 
+function axisGeoJSON(): FeatureCollection<LineString> {
+  const features: Feature<LineString>[] = [];
+  const steps = 180;
+
+  const equator: number[][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const lng = -180 + (360 * i) / steps;
+    equator.push([lng, 0]);
+  }
+  features.push({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: equator },
+    properties: { axis: 'equator' },
+  });
+
+  const primeMeridian: number[][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const lat = -90 + (180 * i) / steps;
+    primeMeridian.push([0, lat]);
+  }
+  features.push({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: primeMeridian },
+    properties: { axis: 'prime-meridian' },
+  });
+
+  const dateline: number[][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const lat = -90 + (180 * i) / steps;
+    dateline.push([180, lat]);
+  }
+  features.push({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: dateline },
+    properties: { axis: 'dateline' },
+  });
+
+  return { type: 'FeatureCollection', features };
+}
+
 function arcsToDeckGL(devices: Device[]) {
   const dc = devices.find((d) => DATA_CENTER_IDS.has(d.id));
   if (!dc) return [];
@@ -136,12 +176,10 @@ function setMapProjection(map: any, mode: ProjectionMode) {
 
   if (mode === 'globe') {
     map.setProjection({ type: 'globe' });
-    map.setPitch(-10);
-    map.setBearing(0);
-  } else {
-    map.setProjection({ type: 'globe' });
     map.setPitch(0);
-    map.setBearing(0);
+  } else {
+    map.setProjection({ type: 'mercator' });
+    map.setPitch(0);
   }
 }
 
@@ -149,12 +187,14 @@ interface GlobeMapProps {
   initialProjection?: ProjectionMode;
   showDayNight?: boolean;
   onProjectionChange?: (mode: ProjectionMode) => void;
+  flyToLocation?: { lat: number; lng: number; site?: string } | null;
 }
 
 export default function GlobeMap({
   initialProjection = 'globe',
   showDayNight = true,
   onProjectionChange,
+  flyToLocation,
 }: GlobeMapProps) {
   const mapRef = useRef<MapRef>(null);
   const overlayRef = useRef<MapboxOverlay | null>(null);
@@ -165,6 +205,10 @@ export default function GlobeMap({
   const [cursor, setCursor] = useState<{ lat: number; lng: number } | null>(null);
   const [devices, setDevices] = useState<Device[]>(DEFAULT_DEVICES);
   const [devicesError, setDevicesError] = useState(false);
+  const rafRef = useRef<number | null>(null);
+  const phiRef = useRef(0);
+  const [isFlying, setIsFlying] = useState(false);
+  const [isInteracting, setIsInteracting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,6 +218,96 @@ export default function GlobeMap({
       .catch(() => { if (!cancelled) setDevicesError(true); });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !ready) return;
+
+    const start = () => setIsInteracting(true);
+    const end = () => setIsInteracting(false);
+
+    map.on('mousedown', start);
+    map.on('touchstart', start);
+    map.on('mouseup', end);
+    map.on('touchend', end);
+
+    return () => {
+      map.off('mousedown', start);
+      map.off('touchstart', start);
+      map.off('mouseup', end);
+      map.off('touchend', end);
+    };
+  }, [ready]);
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !ready) return;
+
+    setIsFlying(true);
+
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    const handleMoveEnd = () => {
+      map.off('moveend', handleMoveEnd);
+      setIsFlying(false);
+    };
+
+    map.on('moveend', handleMoveEnd);
+
+    const resetAfterFallback = setTimeout(() => {
+      map.off('moveend', handleMoveEnd);
+      setIsFlying(false);
+    }, 2000);
+
+    if (!flyToLocation) {
+      const nextCenter: [number, number] = [20, 0];
+      if (typeof (map as any).easeTo === 'function') {
+        (map as any).easeTo({
+          center: nextCenter,
+          zoom: 3,
+          bearing: 0,
+          pitch: 0,
+          duration: 1500,
+          essential: true,
+        });
+      } else {
+        map.setCenter(nextCenter);
+        map.setZoom(3);
+        map.setBearing(0);
+        map.setPitch(0);
+        handleMoveEnd();
+      }
+      return;
+    }
+
+    const nextCenter: [number, number] = [flyToLocation.lng, flyToLocation.lat];
+
+    if (typeof (map as any).easeTo === 'function') {
+      (map as any).easeTo({
+        center: nextCenter,
+        zoom: 10,
+        bearing: 0,
+        pitch: 0,
+        duration: 1500,
+        essential: true,
+      });
+    } else {
+      map.setCenter(nextCenter);
+      map.setZoom(10);
+      map.setBearing(0);
+      map.setPitch(0);
+      handleMoveEnd();
+    }
+
+    return () => {
+      clearTimeout(resetAfterFallback);
+      map.off('moveend', handleMoveEnd);
+      setIsFlying(false);
+    };
+  }, [flyToLocation, ready]);
 
   const handleMove = useCallback((evt: any) => {
     const vs = evt.viewState || evt;
@@ -232,21 +366,58 @@ export default function GlobeMap({
     });
   }, [devices]);
 
+  useEffect(() => {
+    if (!ready || projection !== 'globe' || isFlying || isInteracting || flyToLocation) {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+
+    phiRef.current = map.getCenter().lng;
+    map.jumpTo({ bearing: 0, pitch: 0 });
+
+    const animate = () => {
+      phiRef.current += 0.12;
+      if (phiRef.current > 180) phiRef.current -= 360;
+      map.jumpTo({
+        center: [phiRef.current, 0],
+        bearing: 0,
+        pitch: 0,
+      });
+      rafRef.current = requestAnimationFrame(animate);
+    };
+
+    rafRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [ready, projection, isFlying, isInteracting]);
+
   const scaleBar = computeScaleBar(view.zoom, view.lat);
   const onlineCount = devices.filter((d) => d.status === 'online').length;
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: 'var(--bg-void)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ position: 'relative', flex: 1 }} className="hud-viewport">
-        <Map
-          ref={mapRef}
-          initialViewState={{ latitude: 0, longitude: 20, zoom: 3 }}
-          style={{ width: '100%', height: '100%' }}
-          mapStyle={VECTOR_STYLE_URL}
-          onMove={handleMove}
-          onLoad={() => setReady(true)}
-          reuseMaps
-        >
+         <Map
+           ref={mapRef}
+           initialViewState={{ latitude: 0, longitude: 20, zoom: 3 }}
+           style={{ width: '100%', height: '100%' }}
+           mapStyle={VECTOR_STYLE_URL}
+           onMove={handleMove}
+          onLoad={() => {
+            setReady(true);
+          }}
+           reuseMaps
+         >
           <NavigationControl position="bottom-right" />
 
           <Source id="devices" type="geojson" data={devicesToGeoJSON(devices)}>
@@ -275,6 +446,25 @@ export default function GlobeMap({
                 'circle-stroke-width': 2,
                 'circle-stroke-color': '#0a0a0f',
                 'circle-opacity': 0.95,
+              }}
+            />
+          </Source>
+
+          <Source id="globe-axes" type="geojson" data={axisGeoJSON()}>
+            <Layer
+              id="globe-axes-line"
+              type="line"
+              paint={{
+                'line-color': [
+                  'match',
+                  ['get', 'axis'],
+                  'equator', '#ff4757',
+                  'prime-meridian', '#00ff9d',
+                  'dateline', '#ff9f43',
+                  '#ffffff',
+                ],
+                'line-width': 1.5,
+                'line-opacity': 0.6,
               }}
             />
           </Source>

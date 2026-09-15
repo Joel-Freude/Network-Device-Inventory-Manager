@@ -1,0 +1,124 @@
+{
+  "datacenters": [
+    {
+      "id": "nyc-dc-01",
+      "name": "New York DC",
+      "site": "New York DC",
+      "location": "New York, USA",
+      "lat": 40.7128,
+      "lng": -74.006,
+      "status": "online",
+      "cities": [
+        { "name": "New York", "country": "USA", "lat": 40.7128, "lng": -74.006, "status": "online" },
+        { "name": "Boston", "country": "USA", "lat": 42.3601, "lng": -71.0589, "status": "online" },
+        { "name": "Washington DC", "country": "USA", "lat": 38.9072, "lng": -77.0369, "status": "online" },
+        { "name": "Toronto", "country": "Canada", "lat": 43.6532, "lng": -79.3832, "status": "warning" }
+      ]
+    },
+    {
+      "id": "fra-dc-01",
+      "name": "Frankfurt DC",
+      "site": "Frankfurt DC",
+      "location": "Frankfurt, Germany",
+      "lat": 50.1109,
+      "lng": 8.6821,
+      "status": "online",
+      "cities": [
+        { "name": "Frankfurt", "country": "Germany", "lat": 50.1109, "lng": 8.6821, "status": "online" },
+        { "name": "Paris", "country": "France", "lat": 48.8566, "lng": 2.3522, "status": "online" },
+        { "name": "Amsterdam", "country": "Netherlands", "lat": 52.3676, "lng": 4.9041, "status": "online" },
+        { "name": "Zurich", "country": "Switzerland", "lat": 47.3769, "lng": 8.5417, "status": "warning" }
+      ]
+    },
+    {
+      "id": "sgp-dc-01",
+      "name": "Singapore DC",
+      "site": "Singapore DC",
+      "location": "Singapore",
+      "lat": 1.3521,
+      "lng": 103.8198,
+      "status": "warning",
+      "cities": [
+        { "name": "Singapore", "country": "Singapore", "lat": 1.3521, "lng": 103.8198, "status": "warning" },
+        { "name": "Tokyo", "country": "Japan", "lat": 35.6762, "lng": 139.6503, "status": "online" },
+        { "name": "Hong Kong", "country": "China", "lat": 22.3193, "lng": 114.1694, "status": "online" },
+        { "name": "Seoul", "country": "South Korea", "lat": 37.5665, "lng": 126.978, "status": "offline" }
+      ]
+    },
+    {
+      "id": "lon-dc-01",
+      "name": "London DC",
+      "site": "London DC",
+      "location": "London, UK",
+      "lat": 51.5074,
+      "lng": -0.1278,
+      "status": "online",
+      "cities": [
+        { "name": "London", "country": "UK", "lat": 51.5074, "lng": -0.1278, "status": "online" },
+        { "name": "Dublin", "country": "Ireland", "lat": 53.3498, "lng": -6.2603, "status": "online" },
+        { "name": "Manchester", "country": "UK", "lat": 53.4808, "lng": -2.2426, "status": "warning" },
+        { "name": "Edinburgh", "country": "UK", "lat": 55.9533, "lng": -3.1883, "status": "online" }
+      ]
+    },
+    {
+      "id": "sao-dc-01",
+      "name": "São Paulo DC",
+      "site": "São Paulo DC",
+      "location": "São Paulo, Brazil",
+      "lat": -23.5505,
+      "lng": -46.6333,
+      "status": "offline",
+      "cities": [
+        { "name": "São Paulo", "country": "Brazil", "lat": -23.5505, "lng": -46.6333, "status": "offline" },
+        { "name": "Rio de Janeiro", "country": "Brazil", "lat": -22.9068, "lng": -43.1729, "status": "warning" },
+        { "name": "Buenos Aires", "country": "Argentina", "lat": -34.6037, "lng": -58.3816, "status": "online" },
+        { "name": "Santiago", "country": "Chile", "lat": -33.4489, "lng": -70.6693, "status": "online" }
+      ]
+    },
+    {
+      "id": "syd-dc-01",
+      "name": "Sydney DC",
+      "site": "Sydney DC",
+      "location": "Sydney, Australia",
+      "lat": -33.8688,
+      "lng": 151.2093,
+      "status": "online",
+      "cities": [
+        { "name": "Sydney", "country": "Australia", "lat": -33.8688, "lng": 151.2093, "status": "online" },
+        { "name": "Melbourne", "country": "Australia", "lat": -37.8136, "lng": 144.9631, "status": "online" },
+        { "name": "Auckland", "country": "New Zealand", "lat": -36.8485, "lng": 174.7633, "status": "warning" },
+        { "name": "Brisbane", "country": "Australia", "lat": -27.4698, "lng": 153.0251, "status": "online" }
+      ]
+    },
+    {
+      "id": "yao-pop-01",
+      "name": "Yaoundé POP",
+      "site": "Yaoundé POP",
+      "location": "Yaoundé, Cameroon",
+      "lat": 3.848,
+      "lng": 11.5021,
+      "status": "online",
+      "cities": [
+        { "name": "Yaoundé", "country": "Cameroon", "lat": 3.848, "lng": 11.5021, "status": "online" },
+        { "name": "Douala", "country": "Cameroon", "lat": 4.0511, "lng": 9.7679, "status": "online" },
+        { "name": "Lagos", "country": "Nigeria", "lat": 6.5244, "lng": 3.3792, "status": "warning" },
+        { "name": "Kinshasa", "country": "DRC", "lat": -4.4419, "lng": 15.2663, "status": "offline" }
+      ]
+    },
+    {
+      "id": "dxb-dc-01",
+      "name": "Dubai DC",
+      "site": "Dubai DC",
+      "location": "Dubai, UAE",
+      "lat": 25.2048,
+      "lng": 55.2708,
+      "status": "online",
+      "cities": [
+        { "name": "Dubai", "country": "UAE", "lat": 25.2048, "lng": 55.2708, "status": "online" },
+        { "name": "Abu Dhabi", "country": "UAE", "lat": 24.4539, "lng": 54.3773, "status": "online" },
+        { "name": "Riyadh", "country": "Saudi Arabia", "lat": 24.7136, "lng": 46.6753, "status": "warning" },
+        { "name": "Doha", "country": "Qatar", "lat": 25.2854, "lng": 51.5310, "status": "online" }
+      ]
+    }
+  ]
+}
