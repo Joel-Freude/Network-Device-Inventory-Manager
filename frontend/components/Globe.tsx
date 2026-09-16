@@ -91,46 +91,6 @@ function arcsToGeoJSON(devices: Device[]): FeatureCollection<LineString> {
   return { type: 'FeatureCollection', features };
 }
 
-function axisGeoJSON(): FeatureCollection<LineString> {
-  const features: Feature<LineString>[] = [];
-  const steps = 180;
-
-  const equator: number[][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const lng = -180 + (360 * i) / steps;
-    equator.push([lng, 0]);
-  }
-  features.push({
-    type: 'Feature',
-    geometry: { type: 'LineString', coordinates: equator },
-    properties: { axis: 'equator' },
-  });
-
-  const primeMeridian: number[][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const lat = -90 + (180 * i) / steps;
-    primeMeridian.push([0, lat]);
-  }
-  features.push({
-    type: 'Feature',
-    geometry: { type: 'LineString', coordinates: primeMeridian },
-    properties: { axis: 'prime-meridian' },
-  });
-
-  const dateline: number[][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const lat = -90 + (180 * i) / steps;
-    dateline.push([180, lat]);
-  }
-  features.push({
-    type: 'Feature',
-    geometry: { type: 'LineString', coordinates: dateline },
-    properties: { axis: 'dateline' },
-  });
-
-  return { type: 'FeatureCollection', features };
-}
-
 function arcsToDeckGL(devices: Device[]) {
   const dc = devices.find((d) => DATA_CENTER_IDS.has(d.id));
   if (!dc) return [];
@@ -207,6 +167,7 @@ export default function GlobeMap({
   const [devicesError, setDevicesError] = useState(false);
   const rafRef = useRef<number | null>(null);
   const phiRef = useRef(0);
+  const previousFlyToRef = useRef<{ lat: number; lng: number; site?: string } | null>(null);
   const [isFlying, setIsFlying] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
 
@@ -250,17 +211,24 @@ export default function GlobeMap({
       rafRef.current = null;
     }
 
-    const handleMoveEnd = () => {
+    const cleanup = () => {
       map.off('moveend', handleMoveEnd);
+      map.off('moveend', handleFinalMoveEnd);
       setIsFlying(false);
     };
 
-    map.on('moveend', handleMoveEnd);
+    const handleMoveEnd = () => {
+      map.off('moveend', handleMoveEnd);
+    };
+
+    const handleFinalMoveEnd = () => {
+      map.off('moveend', handleFinalMoveEnd);
+      setIsFlying(false);
+    };
 
     const resetAfterFallback = setTimeout(() => {
-      map.off('moveend', handleMoveEnd);
-      setIsFlying(false);
-    }, 2000);
+      cleanup();
+    }, 3000);
 
     if (!flyToLocation) {
       const nextCenter: [number, number] = [20, 0];
@@ -278,34 +246,93 @@ export default function GlobeMap({
         map.setZoom(3);
         map.setBearing(0);
         map.setPitch(0);
-        handleMoveEnd();
+        cleanup();
       }
-      return;
+      previousFlyToRef.current = null;
+      return () => {
+        clearTimeout(resetAfterFallback);
+        cleanup();
+      };
     }
 
+    const prev = previousFlyToRef.current;
     const nextCenter: [number, number] = [flyToLocation.lng, flyToLocation.lat];
+
+    if (prev && flyToLocation) {
+      const currentCenter = (map as any).getCenter();
+      const currentLng = Number((currentCenter as any)?.lng ?? 0);
+      const currentLat = Number((currentCenter as any)?.lat ?? 0);
+
+      const handleStep1End = () => {
+        map.off('moveend', handleStep1End);
+        setTimeout(() => {
+          map.on('moveend', handleFinalMoveEnd);
+
+          if (typeof (map as any).easeTo === 'function') {
+            (map as any).easeTo({
+              center: nextCenter,
+              zoom: 18,
+              bearing: 0,
+              pitch: 20,
+              duration: 3000,
+              essential: true,
+            });
+          } else {
+            map.setCenter(nextCenter);
+            map.setZoom(18);
+            map.setBearing(0);
+            map.setPitch(20);
+            handleFinalMoveEnd();
+          }
+        }, 1500);
+      };
+
+      map.on('moveend', handleStep1End);
+
+      if (typeof (map as any).easeTo === 'function') {
+        (map as any).easeTo({
+          center: [currentLng, currentLat],
+          zoom: 8,
+          bearing: 0,
+          pitch: 0,
+          duration: 2000,
+          essential: true,
+        });
+      } else {
+        map.setZoom(8);
+        handleStep1End();
+      }
+
+      return () => {
+        clearTimeout(resetAfterFallback);
+        cleanup();
+      };
+    }
+
+    map.on('moveend', handleMoveEnd);
 
     if (typeof (map as any).easeTo === 'function') {
       (map as any).easeTo({
         center: nextCenter,
-        zoom: 10,
+        zoom: 15,
         bearing: 0,
-        pitch: 0,
+        pitch: 20,
         duration: 1500,
         essential: true,
       });
     } else {
       map.setCenter(nextCenter);
-      map.setZoom(10);
+      map.setZoom(15);
       map.setBearing(0);
-      map.setPitch(0);
+      map.setPitch(20);
       handleMoveEnd();
     }
 
+    previousFlyToRef.current = flyToLocation;
+
     return () => {
       clearTimeout(resetAfterFallback);
-      map.off('moveend', handleMoveEnd);
-      setIsFlying(false);
+      cleanup();
     };
   }, [flyToLocation, ready]);
 
@@ -446,25 +473,6 @@ export default function GlobeMap({
                 'circle-stroke-width': 2,
                 'circle-stroke-color': '#0a0a0f',
                 'circle-opacity': 0.95,
-              }}
-            />
-          </Source>
-
-          <Source id="globe-axes" type="geojson" data={axisGeoJSON()}>
-            <Layer
-              id="globe-axes-line"
-              type="line"
-              paint={{
-                'line-color': [
-                  'match',
-                  ['get', 'axis'],
-                  'equator', '#ff4757',
-                  'prime-meridian', '#00ff9d',
-                  'dateline', '#ff9f43',
-                  '#ffffff',
-                ],
-                'line-width': 1.5,
-                'line-opacity': 0.6,
               }}
             />
           </Source>

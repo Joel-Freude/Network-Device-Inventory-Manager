@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { Plus } from 'lucide-react'
 
 interface Device {
   id: string
@@ -56,7 +57,7 @@ interface SiteSummary {
   devices: Device[]
 }
 
-export default function NycPerformanceCard({ onLocationSelect }: { onLocationSelect?: (coords: { lat: number; lng: number; site: string } | null) => void }) {
+export default function NycPerformanceCard({ onLocationSelect, onOpenAddModal }: { onLocationSelect?: (coords: { lat: number; lng: number; site: string } | null) => void; onOpenAddModal?: () => void }) {
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -135,13 +136,22 @@ export default function NycPerformanceCard({ onLocationSelect }: { onLocationSel
 
   return (
     <div className="hud-panel border border-cyan-500/30 rounded-lg p-5 w-[380px]">
-      <div className="mb-4">
-        <div className="text-sm font-semibold text-cyan-300" style={{ fontFamily: 'var(--font-data)' }}>
-          DATACENTERS
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold text-cyan-300" style={{ fontFamily: 'var(--font-data)' }}>
+            DATACENTERS
+          </div>
+          <div className="text-[10px] text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>
+            Global Network Status
+          </div>
         </div>
-        <div className="text-[10px] text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>
-          Global Network Status
-        </div>
+        <button
+          onClick={() => onOpenAddModal?.()}
+          className="flex items-center justify-center w-8 h-8 rounded-full border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 transition-all"
+          title="Add Datacenter"
+        >
+          <Plus size={16} />
+        </button>
       </div>
       <div className="performance-scroll flex flex-col gap-4 max-h-[320px] overflow-y-auto pr-1">
         {sites.map((site) => {
@@ -159,10 +169,10 @@ export default function NycPerformanceCard({ onLocationSelect }: { onLocationSel
           const isSelected = selectedSite === site.site
 
           return (
-            <div key={site.site} className="border-b border-cyan-500/10 pb-4 last:border-0 last:pb-0">
+            <div key={site.site} className={`border-b border-cyan-500/10 pb-4 last:border-0 last:pb-0 ${isSelected ? 'border-l-2 border-l-cyan-400 pl-3' : ''}`}>
               <button
                 onClick={() => toggleSite(site.site, site.lat, site.lng)}
-                className="flex items-center gap-4 w-full text-left hover:bg-cyan-500/5 rounded-lg p-2 -mx-2 transition-colors"
+                className={`flex items-center gap-4 w-full text-left rounded-lg p-2 -mx-2 transition-colors ${isSelected ? 'bg-cyan-500/10' : 'hover:bg-cyan-500/5'}`}
               >
                 <ProgressRing percent={onlinePercent} size={64} strokeWidth={6} />
                 <div className="flex flex-col gap-2 min-w-0 flex-1">

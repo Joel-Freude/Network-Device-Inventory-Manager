@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Literal
 import random
+import os
+import httpx
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="Network Device Inventory Manager API", version="1.0.0")
 
@@ -79,6 +84,27 @@ async def get_devices():
         "devices": [d.model_dump() for d in DEVICES],
         "total": len(DEVICES),
     }
+
+
+LATLNG_API_KEY = os.environ.get("LATLNG_API_KEY", "")
+LATLNG_BASE_URL = "https://api.latlng.work"
+
+
+@app.get("/api/geocode")
+async def geocode(q: str):
+    if not LATLNG_API_KEY:
+        return {"error": "missing_api_key", "features": []}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{LATLNG_BASE_URL}/api",
+                params={"q": q},
+                headers={"X-Api-Key": LATLNG_API_KEY},
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except Exception as exc:
+        return {"error": str(exc), "features": []}
 
 
 if __name__ == "__main__":

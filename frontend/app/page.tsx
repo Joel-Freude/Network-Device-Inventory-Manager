@@ -4,6 +4,7 @@ import { useState } from 'react'
 import GlobeMap from '@/components/Globe'
 import NycPerformanceCard from '@/components/NycPerformanceCard'
 import DeviceList from '@/components/DeviceList'
+import AddDatacenterModal from '@/components/AddDatacenterModal'
 import { Globe, Activity, Network, Settings, BarChart3, Shield, Radio, Layers, LayoutDashboard } from 'lucide-react'
 
 type WidgetKey = 'dashboard' | 'network' | 'activity' | 'settings' | 'layers' | 'analytics' | 'threats' | 'live'
@@ -19,6 +20,8 @@ const WIDGET_LABELS: Record<WidgetKey, string> = {
   live: 'Live feeds',
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
 const LEFT_WIDGET_KEYS: WidgetKey[] = ['dashboard', 'network', 'activity', 'settings']
 const RIGHT_WIDGET_KEYS: WidgetKey[] = ['layers', 'analytics', 'threats', 'live']
 
@@ -26,6 +29,7 @@ export default function DashboardPage() {
   const [activeWidgets, setActiveWidgets] = useState<WidgetKey[]>(['dashboard'])
   const [flyToLocation, setFlyToLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [selectedSite, setSelectedSite] = useState<string | null>(null)
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
 
   const toggleWidget = (key: WidgetKey) => {
     setActiveWidgets((prev) => {
@@ -79,6 +83,9 @@ export default function DashboardPage() {
             </button>
           ))}
         </nav>
+        <div className="text-xs tracking-widest text-gray-400" style={{ fontFamily: 'var(--font-data)' }}>
+          {WIDGET_LABELS[activeWidgets.find((key) => LEFT_WIDGET_KEYS.includes(key)) ?? 'dashboard']}
+        </div>
       </div>
 
       {/* Floating right tools rail */}
@@ -115,9 +122,22 @@ export default function DashboardPage() {
               <NycPerformanceCard onLocationSelect={(coords) => {
                 setFlyToLocation(coords)
                 setSelectedSite(coords?.site ?? null)
-              }} />
+              }} onOpenAddModal={() => setIsAddModalOpen(true)} />
               {selectedSite && <DeviceList site={selectedSite} />}
             </div>
+            <AddDatacenterModal
+              isOpen={isAddModalOpen}
+              onClose={() => setIsAddModalOpen(false)}
+              onAdd={(dc) => {
+                fetch(`${API_URL}/api/devices`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(dc),
+                }).then(() => {
+                  window.location.reload()
+                })
+              }}
+            />
             <GlobeMap flyToLocation={flyToLocation} />
           </>
         )}
