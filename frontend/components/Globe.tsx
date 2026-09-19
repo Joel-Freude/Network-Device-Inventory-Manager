@@ -47,16 +47,16 @@ const STATUS_COLOR: Record<Device['status'], string> = {
 };
 
 const DEFAULT_DEVICES: Device[] = [
-  { id: '1', hostname: 'nyc-dc-01', ip: '10.0.0.1', vendor: 'AWS', model: 'DC-01', site: 'New York Data Center', lat: 40.7128, lng: -74.006, status: 'online' },
-  { id: '2', hostname: 'switch-02', ip: '10.0.1.1', vendor: 'Juniper', model: 'EX4300', site: 'London', lat: 51.5074, lng: -0.1278, status: 'online' },
-  { id: '3', hostname: 'firewall-01', ip: '10.0.2.1', vendor: 'Palo Alto', model: 'PA-5200', site: 'Tokyo', lat: 35.6762, lng: 139.6503, status: 'warning' },
-  { id: '4', hostname: 'server-01', ip: '10.0.3.1', vendor: 'Dell', model: 'PowerEdge', site: 'Sydney', lat: -33.8688, lng: 151.2093, status: 'online' },
-  { id: '5', hostname: 'ap-01', ip: '10.0.4.1', vendor: 'Ubiquiti', model: 'U6 Pro', site: 'Paris', lat: 48.8566, lng: 2.3522, status: 'offline' },
-  { id: '6', hostname: 'router-02', ip: '10.0.5.1', vendor: 'Cisco', model: 'ISR 4000', site: 'Berlin', lat: 52.52, lng: 13.405, status: 'online' },
+  { id: 'dev-002', hostname: 'core-sw-nyc01', ip: '10.0.0.2', vendor: 'Juniper', model: 'QFX5120', site: 'New York DC', lat: 40.7128, lng: -74.006, status: 'online' },
+  { id: 'dev-004', hostname: 'fw-lon01', ip: '10.0.1.4', vendor: 'Fortinet', model: 'FortiGate 600E', site: 'London DC', lat: 51.5074, lng: -0.1278, status: 'online' },
+  { id: 'dev-012', hostname: 'core-sw-tky01', ip: '10.0.2.12', vendor: 'Cisco', model: 'Nexus 9300', site: 'Tokyo DC', lat: 35.6762, lng: 139.6503, status: 'online' },
+  { id: 'dev-016', hostname: 'core-sw-syd01', ip: '10.0.3.16', vendor: 'Arista', model: '7280R', site: 'Sydney DC', lat: -33.8688, lng: 151.2093, status: 'online' },
+  { id: 'dev-021', hostname: 'core-sw-par01', ip: '10.0.4.21', vendor: 'Cisco', model: 'Catalyst 9500', site: 'Paris DC', lat: 48.8566, lng: 2.3522, status: 'online' },
+  { id: 'dev-029', hostname: 'core-sw-ber01', ip: '10.0.5.29', vendor: 'Cisco', model: 'Nexus 9300', site: 'Berlin DC', lat: 52.52, lng: 13.405, status: 'online' },
 ];
 
-const DATA_CENTER_IDS = new Set(['1', 'dev-002']);
-const CONNECTED_SITE_IDS = new Set(['2', '3', '4', '5', '6', 'dev-001', 'dev-003', 'dev-004', 'dev-005', 'dev-006', 'dev-007']);
+const DATA_CENTER_IDS = new Set(['dev-002', 'dev-006', 'dev-012', 'dev-016', 'dev-021', 'dev-029']);
+const CONNECTED_SITE_IDS = new Set(['dev-001', 'dev-003', 'dev-004', 'dev-005', 'dev-007', 'dev-008', 'dev-009', 'dev-010', 'dev-011', 'dev-013', 'dev-014', 'dev-015', 'dev-017', 'dev-018', 'dev-019', 'dev-020', 'dev-022', 'dev-023', 'dev-024', 'dev-025', 'dev-026', 'dev-027', 'dev-028', 'dev-030', 'dev-031', 'dev-032', 'dev-033', 'dev-034', 'dev-035', 'dev-036']);
 
 function devicesToGeoJSON(devices: Device[]): FeatureCollection<Point, Device> {
   return {
@@ -238,7 +238,7 @@ export default function GlobeMap({
           zoom: 3,
           bearing: 0,
           pitch: 0,
-          duration: 1500,
+          duration: 4000,
           essential: true,
         });
       } else {
@@ -266,6 +266,30 @@ export default function GlobeMap({
       const handleStep1End = () => {
         map.off('moveend', handleStep1End);
         setTimeout(() => {
+          map.on('moveend', handleStep2End);
+
+          if (typeof (map as any).easeTo === 'function') {
+            (map as any).easeTo({
+              center: nextCenter,
+              zoom: 12,
+              bearing: 0,
+              pitch: 0,
+              duration: 3000,
+              essential: true,
+            });
+          } else {
+            map.setCenter(nextCenter);
+            map.setZoom(12);
+            map.setBearing(0);
+            map.setPitch(0);
+            handleStep2End();
+          }
+        }, 2500);
+      };
+
+      const handleStep2End = () => {
+        map.off('moveend', handleStep2End);
+        setTimeout(() => {
           map.on('moveend', handleFinalMoveEnd);
 
           if (typeof (map as any).easeTo === 'function') {
@@ -274,7 +298,7 @@ export default function GlobeMap({
               zoom: 18,
               bearing: 0,
               pitch: 20,
-              duration: 3000,
+              duration: 4000,
               essential: true,
             });
           } else {
@@ -295,7 +319,7 @@ export default function GlobeMap({
           zoom: 8,
           bearing: 0,
           pitch: 0,
-          duration: 2000,
+          duration: 4500,
           essential: true,
         });
       } else {
@@ -317,7 +341,7 @@ export default function GlobeMap({
         zoom: 15,
         bearing: 0,
         pitch: 20,
-        duration: 1500,
+        duration: 4500,
         essential: true,
       });
     } else {
@@ -437,13 +461,14 @@ export default function GlobeMap({
          <Map
            ref={mapRef}
            initialViewState={{ latitude: 0, longitude: 20, zoom: 3 }}
-           style={{ width: '100%', height: '100%' }}
+           style={{ width: '100%', height: '100%', backgroundColor: 'black' }}
            mapStyle={VECTOR_STYLE_URL}
            onMove={handleMove}
-          onLoad={() => {
-            setReady(true);
-          }}
+           onLoad={() => {
+             setReady(true);
+           }}
            reuseMaps
+           attributionControl={false}
          >
           <NavigationControl position="bottom-right" />
 
@@ -452,24 +477,24 @@ export default function GlobeMap({
               id="devices-circle"
               type="circle"
               paint={{
-                'circle-radius': [
-                  'case',
-                  ['==', ['get', 'site'], 'New York Data Center'],
-                  14,
-                  8,
-                ],
-                'circle-color': [
-                  'case',
-                  ['==', ['get', 'site'], 'New York Data Center'],
-                  '#ff4757',
-                  ['==', ['get', 'status'], 'online'],
-                  STATUS_COLOR.online,
-                  ['==', ['get', 'status'], 'warning'],
-                  STATUS_COLOR.warning,
-                  ['==', ['get', 'status'], 'offline'],
-                  STATUS_COLOR.offline,
-                  '#00ff9d',
-                ],
+                 'circle-radius': [
+                   'case',
+                   ['==', ['get', 'site'], 'New York DC'],
+                   14,
+                   8,
+                 ],
+                 'circle-color': [
+                   'case',
+                   ['==', ['get', 'site'], 'New York DC'],
+                   '#ff4757',
+                   ['==', ['get', 'status'], 'online'],
+                   STATUS_COLOR.online,
+                   ['==', ['get', 'status'], 'warning'],
+                   STATUS_COLOR.warning,
+                   ['==', ['get', 'status'], 'offline'],
+                   STATUS_COLOR.offline,
+                   '#00ff9d',
+                 ],
                 'circle-stroke-width': 2,
                 'circle-stroke-color': '#0a0a0f',
                 'circle-opacity': 0.95,

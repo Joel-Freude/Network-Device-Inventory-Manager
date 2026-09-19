@@ -440,11 +440,12 @@ export default function AddDatacenterModal({ isOpen, onClose, onAdd }: AddDatace
             {mapReady ? (
               <Map
                 initialViewState={{ latitude: mapView.lat, longitude: mapView.lng, zoom: mapView.zoom }}
-                style={{ width: '100%', height: '100%' }}
+                style={{ width: '100%', height: '100%', backgroundColor: 'black' }}
                 mapStyle={VECTOR_STYLE_URL}
                 reuseMaps
                 cursor="crosshair"
                 onClick={handleMapClick}
+                attributionControl={false}
               >
                 {hasValidCoords && (
                   <Source id="marker" type="geojson" data={{

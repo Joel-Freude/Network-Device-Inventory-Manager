@@ -1,13 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import GlobeMap from '@/components/Globe'
 import NycPerformanceCard from '@/components/NycPerformanceCard'
 import DeviceList from '@/components/DeviceList'
 import AddDatacenterModal from '@/components/AddDatacenterModal'
+import SplashScreen from '@/components/SplashScreen'
 import { Globe, Activity, Network, Settings, BarChart3, Shield, Radio, Layers, LayoutDashboard } from 'lucide-react'
 
 type WidgetKey = 'dashboard' | 'network' | 'activity' | 'settings' | 'layers' | 'analytics' | 'threats' | 'live'
+
+interface Device {
+  id: string
+  hostname: string
+  ip: string
+  vendor: string
+  model: string
+  site: string
+  lat: number
+  lng: number
+  status: 'online' | 'warning' | 'offline'
+}
 
 const WIDGET_LABELS: Record<WidgetKey, string> = {
   dashboard: 'Dashboard',
@@ -22,6 +35,32 @@ const WIDGET_LABELS: Record<WidgetKey, string> = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
+const STATUS_COLOR: Record<Device['status'], string> = {
+  online: '#00ff9d',
+  warning: '#ff9f43',
+  offline: '#ff4757',
+}
+
+type TopologyType = 'star' | 'bus' | 'ring' | 'mesh' | 'tree' | 'hybrid'
+
+const DATACENTER_TOPOLOGIES: Record<string, TopologyType> = {
+  'New York DC': 'star',
+  'London DC': 'bus',
+  'Tokyo DC': 'ring',
+  'Sydney DC': 'mesh',
+  'Paris DC': 'tree',
+  'Berlin DC': 'hybrid',
+}
+
+const TOPOLOGY_LABELS: Record<TopologyType, string> = {
+  star: 'STAR',
+  bus: 'BUS',
+  ring: 'RING',
+  mesh: 'MESH',
+  tree: 'TREE',
+  hybrid: 'HYBRID',
+}
+
 const LEFT_WIDGET_KEYS: WidgetKey[] = ['dashboard', 'network', 'activity', 'settings']
 const RIGHT_WIDGET_KEYS: WidgetKey[] = ['layers', 'analytics', 'threats', 'live']
 
@@ -30,6 +69,327 @@ export default function DashboardPage() {
   const [flyToLocation, setFlyToLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [selectedSite, setSelectedSite] = useState<string | null>(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [showSplash, setShowSplash] = useState(true)
+
+  const [devices, setDevices] = useState<Device[]>([])
+  const [devicesLoading, setDevicesLoading] = useState(false)
+  const [devicesError, setDevicesError] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'warning' | 'offline'>('all')
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
+  const [selectedSiteForTopology, setSelectedSiteForTopology] = useState<string | null>(null)
+  const [showDeviceList, setShowDeviceList] = useState(false)
+  const [showNetworkModal, setShowNetworkModal] = useState(false)
+
+  useEffect(() => {
+    if (!activeWidgets.includes('network')) return
+    let cancelled = false
+    setDevicesLoading(true)
+    setDevicesError(false)
+    fetch(`${API_URL}/api/devices`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) {
+          setDevices(data.devices ?? [])
+          setDevicesLoading(false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDevicesError(true)
+          setDevicesLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeWidgets])
+
+  const filteredDevices = devices.filter((device) => {
+    const matchesSearch =
+      !searchQuery ||
+      device.hostname.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      device.ip.includes(searchQuery) ||
+      device.site.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesStatus = statusFilter === 'all' || device.status === statusFilter
+    return matchesSearch && matchesStatus
+  })
+
+  const handleSelectDevice = (device: Device) => {
+    setSelectedDevice(device)
+    setFlyToLocation({ lat: device.lat, lng: device.lng })
+  }
+
+  const sites = Array.from(new Set(devices.map((d) => d.site)))
+  const activeSite = selectedSiteForTopology ?? sites[0] ?? null
+  const siteDevices = activeSite ? devices.filter((d) => d.site === activeSite) : []
+  const topologyType: TopologyType = activeSite ? DATACENTER_TOPOLOGIES[activeSite] ?? 'star' : 'star'
+
+  const renderTopology = () => {
+    const width = 380
+    const height = 220
+    const nodes = siteDevices.map((device, index) => ({ device, index }))
+
+    const getDeviceType = (device: Device): string => {
+      const h = device.hostname.toLowerCase()
+      if (h.startsWith('core-sw-') || h.startsWith('sw-') || h.includes('switch')) return 'switch'
+      if (h.startsWith('edge-rtr-') || h.startsWith('router-')) return 'router'
+      if (h.startsWith('fw-') || h.includes('firewall')) return 'firewall'
+      if (h.startsWith('srv-') || h.startsWith('server-')) return 'server'
+      if (h.startsWith('ap-') || h.startsWith('acc-')) return 'ap'
+      return 'server'
+    }
+
+    const deviceIcon = (x: number, y: number, device: Device) => {
+      const type = getDeviceType(device)
+      const fill = STATUS_COLOR[device.status]
+      if (type === 'switch') {
+        return (
+          <g key={device.id}>
+            <rect x={x - 10} y={y - 6} width="20" height="12" rx="2" fill={fill} filter="url(#glow)" />
+            <circle cx={x - 5} cy={y} r="1" fill="#0a0a0f" />
+            <circle cx={x} cy={y} r="1" fill="#0a0a0f" />
+            <circle cx={x + 5} cy={y} r="1" fill="#0a0a0f" />
+          </g>
+        )
+      }
+      if (type === 'router') {
+        return (
+          <g key={device.id}>
+            <rect x={x - 9} y={y - 5} width="18" height="10" rx="2" fill={fill} filter="url(#glow)" />
+            <path d={`M${x - 6},${y - 1} L${x - 3},${y - 3} M${x - 6},${y + 1} L${x - 3},${y + 3}`} stroke="#0a0a0f" strokeWidth="1" />
+            <path d={`M${x + 6},${y - 1} L${x + 3},${y - 3} M${x + 6},${y + 1} L${x + 3},${y + 3}`} stroke="#0a0a0f" strokeWidth="1" />
+          </g>
+        )
+      }
+      if (type === 'firewall') {
+        return (
+          <g key={device.id}>
+            <path d={`M${x},${y - 8} L${x + 7},${y - 4} L${x + 7},${y + 4} L${x},${y + 8} L${x - 7},${y + 4} L${x - 7},${y - 4} Z`} fill={fill} filter="url(#glow)" />
+            <rect x={x - 3} y={y - 2} width="6" height="4" rx="1" fill="#0a0a0f" />
+          </g>
+        )
+      }
+      if (type === 'ap') {
+        return (
+          <g key={device.id}>
+            <circle cx={x} cy={y} r="7" fill="none" stroke={fill} strokeWidth="1.5" filter="url(#glow)" />
+            <circle cx={x} cy={y} r="3" fill={fill} />
+            <path d={`M${x},${y - 10} Q${x},${y - 5} ${x},${y}`} stroke={fill} strokeWidth="1" fill="none" />
+            <path d={`M${x - 6},${y - 6} Q${x - 3},${y - 3} ${x},${y}`} stroke={fill} strokeWidth="1" fill="none" />
+            <path d={`M${x + 6},${y - 6} Q${x + 3},${y - 3} ${x},${y}`} stroke={fill} strokeWidth="1" fill="none" />
+          </g>
+        )
+      }
+      return (
+        <g key={device.id}>
+          <rect x={x - 8} y={y - 6} width="16" height="12" rx="2" fill={fill} filter="url(#glow)" />
+          <rect x={x - 5} y={y - 3} width="10" height="1" fill="#0a0a0f" />
+          <rect x={x - 5} y={y} width="10" height="1" fill="#0a0a0f" />
+          <circle cx={x + 4} cy={y + 3.5} r="1" fill="#0a0a0f" />
+        </g>
+      )
+    }
+
+    const commonNode = (x: number, y: number, device: Device) => (
+      <g>
+        {deviceIcon(x, y, device)}
+        <text x={x} y={y + 16} textAnchor="middle" fill="#9ca3af" fontSize="7" style={{ fontFamily: 'var(--font-data)' }}>
+          {device.hostname}
+        </text>
+      </g>
+    )
+
+    if (topologyType === 'star') {
+      const cx = width / 2
+      const cy = height / 2
+      const r = Math.min(width, height) / 2 - 28
+      return (
+        <>
+          {nodes.map(({ device }, idx) => {
+            const angle = ((idx + 1) / (nodes.length + 1)) * Math.PI * 2 - Math.PI / 2
+            const x = cx + r * Math.cos(angle)
+            const y = cy + r * Math.sin(angle)
+            return (
+              <g key={device.id}>
+                <line x1={cx} y1={cy} x2={x} y2={y} stroke="rgba(0,212,255,0.15)" strokeWidth="1" />
+                {commonNode(x, y, device)}
+              </g>
+            )
+          })}
+          <circle cx={cx} cy={cy} r="9" fill="#00d4ff" filter="url(#glow)" />
+          <text x={cx} y={cy + 22} textAnchor="middle" fill="#9ca3af" fontSize="9" style={{ fontFamily: 'var(--font-data)' }}>
+            CORE SWITCH
+          </text>
+        </>
+      )
+    }
+
+    if (topologyType === 'bus') {
+      const busY = height / 2
+      const startX = 30
+      const endX = width - 30
+      return (
+        <>
+          <line x1={startX} y1={busY} x2={endX} y2={busY} stroke="rgba(0,212,255,0.25)" strokeWidth="2" />
+          {nodes.map(({ device }, idx) => {
+            const x = startX + ((idx + 1) / (nodes.length + 1)) * (endX - startX)
+            return (
+              <g key={device.id}>
+                <line x1={x} y1={busY} x2={x} y2={busY - 18} stroke="rgba(0,212,255,0.2)" strokeWidth="1" />
+                {commonNode(x, busY - 24, device)}
+              </g>
+            )
+          })}
+          <text x={width / 2} y={busY + 18} textAnchor="middle" fill="#9ca3af" fontSize="9" style={{ fontFamily: 'var(--font-data)' }}>
+            BACKBONE BUS
+          </text>
+        </>
+      )
+    }
+
+    if (topologyType === 'ring') {
+      const cx = width / 2
+      const cy = height / 2
+      const r = Math.min(width, height) / 2 - 28
+      const points = nodes.map(({ device }, idx) => {
+        const angle = (idx / nodes.length) * Math.PI * 2 - Math.PI / 2
+        return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), device }
+      })
+      return (
+        <>
+          <polyline
+            points={points.map((p) => `${p.x},${p.y}`).join(' ')}
+            stroke="rgba(0,212,255,0.25)"
+            strokeWidth="1.5"
+            fill="none"
+          />
+          {points.map((p) => commonNode(p.x, p.y, p.device))}
+          <text x={cx} y={cy + 18} textAnchor="middle" fill="#9ca3af" fontSize="9" style={{ fontFamily: 'var(--font-data)' }}>
+            RING
+          </text>
+        </>
+      )
+    }
+
+    if (topologyType === 'mesh') {
+      const cols = Math.ceil(Math.sqrt(nodes.length))
+      const rows = Math.ceil(nodes.length / cols)
+      const cellW = width / (cols + 1)
+      const cellH = height / (rows + 1)
+      const points = nodes.map(({ device }, idx) => {
+        const col = idx % cols
+        const row = Math.floor(idx / cols)
+        return { x: cellW * (col + 1), y: cellH * (row + 1), device }
+      })
+      return (
+        <>
+          {points.map((a, i) =>
+            points.map((b, j) =>
+              i < j ? (
+                <line key={`${i}-${j}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="rgba(0,212,255,0.1)" strokeWidth="1" />
+              ) : null
+            )
+          )}
+          {points.map((p) => commonNode(p.x, p.y, p.device))}
+          <text x={width / 2} y={height - 10} textAnchor="middle" fill="#9ca3af" fontSize="9" style={{ fontFamily: 'var(--font-data)' }}>
+            MESH
+          </text>
+        </>
+      )
+    }
+
+    if (topologyType === 'tree') {
+      const cx = width / 2
+      const rootY = 24
+      const levelGap = 56
+      const levelYs = [rootY, rootY + levelGap, rootY + levelGap * 2, rootY + levelGap * 3]
+      const padding = 32
+      const usableWidth = width - padding * 2
+
+      const assignLevel = (count: number, level: number): { x: number; y: number; device: Device }[] => {
+        const result: { x: number; y: number; device: Device }[] = []
+        const step = count > 1 ? usableWidth / (count - 1) : 0
+        for (let i = 0; i < count; i++) {
+          const x = count === 1 ? cx : padding + step * i
+          result.push({ x, y: levelYs[level], device: nodes[i].device })
+        }
+        return result
+      }
+
+      const rootCount = 1
+      const remaining = nodes.length - rootCount
+      const branchCount = Math.min(2, remaining)
+      const leafCount = remaining - branchCount
+
+      const rootNodes = assignLevel(rootCount, 0)
+      const branchNodes = assignLevel(branchCount, 1)
+      const leafNodes = assignLevel(leafCount, 2)
+
+      const allNodes = [...rootNodes, ...branchNodes, ...leafNodes]
+
+      const links: { x1: number; y1: number; x2: number; y2: number }[] = []
+      let nodeIndex = 0
+
+      if (allNodes.length > 0) {
+        const root = allNodes[nodeIndex++]
+        for (let i = 0; i < branchCount && nodeIndex < allNodes.length; i++) {
+          const branch = allNodes[nodeIndex++]
+          links.push({ x1: root.x, y1: root.y, x2: branch.x, y2: branch.y })
+          if (leafCount > 0 && nodeIndex < allNodes.length) {
+            const leaf = allNodes[nodeIndex++]
+            links.push({ x1: branch.x, y1: branch.y, x2: leaf.x, y2: leaf.y })
+          }
+        }
+      }
+
+      return (
+        <>
+          {links.map((link, idx) => (
+            <line key={idx} x1={link.x1} y1={link.y1} x2={link.x2} y2={link.y2} stroke="rgba(0,212,255,0.2)" strokeWidth="1" />
+          ))}
+          {allNodes.map((p) => commonNode(p.x, p.y, p.device))}
+          <text x={cx} y={height - 10} textAnchor="middle" fill="#9ca3af" fontSize="9" style={{ fontFamily: 'var(--font-data)' }}>
+            TREE
+          </text>
+        </>
+      )
+    }
+
+    const hybridTopology = topologyType === 'hybrid' ? 'star' : 'star'
+    const cx = width / 2
+    const cy = height / 2
+    const r = Math.min(width, height) / 2 - 28
+    const coreLinks = nodes.slice(0, Math.max(1, Math.floor(nodes.length / 2))).map(({ device }, idx) => {
+      const angle = (idx / Math.max(1, Math.floor(nodes.length / 2))) * Math.PI * 2 - Math.PI / 2
+      return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), device }
+    })
+    const ringNodes = nodes.slice(coreLinks.length).map(({ device }, idx) => {
+      const angle = (idx / Math.max(1, nodes.length - coreLinks.length)) * Math.PI * 2 - Math.PI / 2
+      return { x: cx + (r * 0.55) * Math.cos(angle), y: cy + (r * 0.55) * Math.sin(angle), device }
+    })
+    return (
+      <>
+        {coreLinks.map((p) => (
+          <g key={p.device.id}>
+            <line x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="rgba(0,212,255,0.15)" strokeWidth="1" />
+            {commonNode(p.x, p.y, p.device)}
+          </g>
+        ))}
+        <polyline
+          points={ringNodes.map((p) => `${p.x},${p.y}`).join(' ')}
+          stroke="rgba(0,212,255,0.25)"
+          strokeWidth="1.5"
+          fill="none"
+        />
+        {ringNodes.map((p) => commonNode(p.x, p.y, p.device))}
+        <circle cx={cx} cy={cy} r="9" fill="#00d4ff" filter="url(#glow)" />
+        <text x={cx} y={cy + 22} textAnchor="middle" fill="#9ca3af" fontSize="9" style={{ fontFamily: 'var(--font-data)' }}>
+          HYBRID
+        </text>
+      </>
+    )
+  }
 
   const toggleWidget = (key: WidgetKey) => {
     setActiveWidgets((prev) => {
@@ -40,14 +400,20 @@ export default function DashboardPage() {
         return [key]
       }
 
-      return has ? prev.filter((k) => k !== key) : [...prev, key]
+      if (has) {
+        return prev.filter((k) => k !== key)
+      }
+
+      return [...prev.filter((k) => !RIGHT_WIDGET_KEYS.includes(k)), key]
     })
   }
 
   const isActive = (key: WidgetKey) => activeWidgets.includes(key)
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-cyber-black">
+    <>
+      {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
+      <div className="flex h-screen w-screen overflow-hidden bg-cyber-black">
       {/* Top-left title + horizontal icon rail */}
       <div className="fixed top-4 left-3 z-50 flex items-center gap-3">
         <div className="bg-transparent border border-cyan-500/30 rounded-lg px-4 py-2 backdrop-blur-sm">
@@ -84,7 +450,7 @@ export default function DashboardPage() {
           ))}
         </nav>
         <div className="text-xs tracking-widest text-gray-400" style={{ fontFamily: 'var(--font-data)' }}>
-          {WIDGET_LABELS[activeWidgets.find((key) => LEFT_WIDGET_KEYS.includes(key)) ?? 'dashboard']}
+          {WIDGET_LABELS[activeWidgets.find((key) => LEFT_WIDGET_KEYS.includes(key)) ?? '']}
         </div>
       </div>
 
@@ -116,6 +482,8 @@ export default function DashboardPage() {
 
       {/* Main content */}
       <main className="flex-1 relative overflow-hidden">
+        <GlobeMap flyToLocation={flyToLocation} />
+
         {isActive('dashboard') && (
           <>
             <div className="absolute left-4 top-24 z-30 pt-10 flex flex-col gap-4">
@@ -138,23 +506,231 @@ export default function DashboardPage() {
                 })
               }}
             />
-            <GlobeMap flyToLocation={flyToLocation} />
           </>
         )}
 
         {isActive('network') && (
-          <div className="h-full w-full flex items-center justify-center pointer-events-none">
-            <div className="cyber-panel rounded-lg p-8 text-center pointer-events-auto">
-              <Network size={48} className="text-cyber-accent mx-auto mb-4" />
-              <h2 className="text-2xl font-bold cyber-text mb-2">NETWORK</h2>
-              <p className="text-cyber-muted">Network management interface coming soon...</p>
+          <>
+             <div className="absolute left-4 top-24 z-30 flex flex-col gap-4 w-[420px]">
+              <div className="hud-panel border border-cyan-500/30 rounded-lg p-4">
+                 <div className="flex items-center justify-between mb-3">
+                   <h2 className="text-sm font-bold text-cyan-300 tracking-wider">NETWORK TOPOLOGY</h2>
+                   <span className="text-[10px] text-cyber-muted" style={{ fontFamily: 'var(--font-data)' }}>
+                     {TOPOLOGY_LABELS[topologyType]} · {siteDevices.length} DEVICE{siteDevices.length !== 1 ? 'S' : ''}
+                   </span>
+                 </div>
+                 <div className="flex flex-col gap-2 mb-3">
+                   <div className="flex items-center justify-between gap-2">
+                     <button
+                       onClick={() => {
+                         const idx = sites.indexOf(activeSite)
+                         const prev = idx <= 0 ? sites[sites.length - 1] : sites[idx - 1]
+                         setSelectedSiteForTopology(prev)
+                         setSearchQuery('')
+                         setStatusFilter('all')
+                       }}
+                       className="flex h-8 w-8 items-center justify-center rounded border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/10"
+                     >
+                       ‹
+                     </button>
+                     <div className="flex-1 text-center text-xs text-gray-200" style={{ fontFamily: 'var(--font-data)' }}>
+                       {activeSite ?? 'SELECT DATACENTER'}
+                     </div>
+                     <button
+                       onClick={() => {
+                         const idx = sites.indexOf(activeSite)
+                         const next = idx >= sites.length - 1 ? sites[0] : sites[idx + 1]
+                         setSelectedSiteForTopology(next)
+                         setSearchQuery('')
+                         setStatusFilter('all')
+                       }}
+                       className="flex h-8 w-8 items-center justify-center rounded border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/10"
+                     >
+                       ›
+                     </button>
+                   </div>
+                   <div className="flex items-center gap-2 text-[10px]" style={{ fontFamily: 'var(--font-data)' }}>
+                     {(['all', 'online', 'warning', 'offline'] as const).map((status) => (
+                       <button
+                         key={status}
+                         onClick={() => setStatusFilter(status)}
+                         className={`px-2 py-1 rounded border transition-colors ${
+                           statusFilter === status
+                             ? 'border-cyan-400/60 text-cyan-300 bg-cyan-500/10'
+                             : 'border-cyan-500/10 text-gray-400 hover:text-white'
+                         }`}
+                       >
+                         {status.toUpperCase()}
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+                 <div className="relative w-full rounded border border-cyan-500/10 bg-black/20 overflow-hidden" style={{ height: 260 }}>
+                   <svg className="absolute inset-0 w-full h-full">
+                     <defs>
+                       <filter id="glow">
+                         <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
+                         <feMerge>
+                           <feMergeNode in="coloredBlur" />
+                           <feMergeNode in="SourceGraphic" />
+                         </feMerge>
+                       </filter>
+                     </defs>
+                     {siteDevices.length === 0 ? (
+                       <text x="50%" y="50%" textAnchor="middle" fill="#6b7280" fontSize="10" style={{ fontFamily: 'var(--font-data)' }}>
+                         NO DEVICES FOR THIS SITE
+                       </text>
+                     ) : (
+                       renderTopology()
+                     )}
+                   </svg>
+                 </div>
+                <button
+                  onClick={() => setShowNetworkModal(true)}
+                  className="w-full rounded border border-cyan-500/20 px-3 py-2 text-xs text-cyan-300 hover:bg-cyan-500/10"
+                  style={{ fontFamily: 'var(--font-data)' }}
+                >
+                  ORGANIZE NETWORK
+                </button>
+               </div>
+
+              {showDeviceList && (
+                <div key={activeSite ?? 'all'} className="hud-panel rounded-lg p-4">
+                  <div className="text-xs font-semibold text-cyan-300 mb-3" style={{ fontFamily: 'var(--font-data)' }}>
+                    DEVICES — {activeSite ?? 'ALL SITES'}
+                  </div>
+                  <div className="max-h-[180px] overflow-y-auto pr-1">
+                    {devicesLoading && (
+                      <div className="flex flex-col gap-2">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="flex items-center gap-3 animate-pulse">
+                            <div className="h-4 w-24 bg-cyan-500/10 rounded" />
+                            <div className="h-3 w-16 bg-cyan-500/10 rounded" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {devicesError && (
+                      <div className="text-xs text-red-400">Failed to load devices</div>
+                    )}
+                    {!devicesLoading && !devicesError && (
+                      <div className="flex flex-col gap-1">
+                        {(activeSite ? siteDevices : filteredDevices).map((device) => {
+                          const isSelected = selectedDevice?.id === device.id
+                          return (
+                            <button
+                              key={device.id}
+                              onClick={() => handleSelectDevice(device)}
+                              className={`w-full text-left rounded border px-3 py-2 transition-colors ${
+                                isSelected
+                                  ? 'border-cyan-400/40 bg-cyan-500/10'
+                                  : 'border-cyan-500/10 hover:border-cyan-400/30 hover:bg-cyan-500/5'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-gray-200" style={{ fontFamily: 'var(--font-data)' }}>
+                                  {device.hostname}
+                                </span>
+                                <span
+                                  className="text-[10px] font-semibold px-2 py-0.5 rounded"
+                                  style={{
+                                    fontFamily: 'var(--font-data)',
+                                    backgroundColor: `${STATUS_COLOR[device.status]}20`,
+                                    color: STATUS_COLOR[device.status],
+                                  }}
+                                >
+                                  {device.status.toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="mt-1 flex items-center justify-between text-[10px] text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>
+                                <span>{device.ip}</span>
+                                <span>{device.site}</span>
+                              </div>
+                            </button>
+                          )
+                        })}
+                        {(activeSite ? siteDevices : filteredDevices).length === 0 && (
+                          <div className="text-xs text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>
+                            No matching devices.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+
+            {selectedDevice && (
+              <div className="absolute right-4 top-24 z-30 w-80 right-widget-panel is-active">
+                <div className="hud-panel rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-cyan-400 tracking-wider">DEVICE DETAIL</h3>
+                    <button
+                      onClick={() => setSelectedDevice(null)}
+                      className="text-[10px] text-gray-400 hover:text-white"
+                      style={{ fontFamily: 'var(--font-data)' }}
+                    >
+                      CLOSE
+                    </button>
+                  </div>
+                  <div className="space-y-2 text-xs" style={{ fontFamily: 'var(--font-data)' }}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">HOSTNAME</span>
+                      <span className="text-gray-200">{selectedDevice.hostname}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">IP</span>
+                      <span className="text-gray-200">{selectedDevice.ip}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">VENDOR</span>
+                      <span className="text-gray-200">{selectedDevice.vendor}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">MODEL</span>
+                      <span className="text-gray-200">{selectedDevice.model}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">SITE</span>
+                      <span className="text-gray-200">{selectedDevice.site}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">COORDINATES</span>
+                      <span className="text-gray-200">{selectedDevice.lat.toFixed(4)}, {selectedDevice.lng.toFixed(4)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">STATUS</span>
+                      <span
+                        className="font-semibold"
+                        style={{ color: STATUS_COLOR[selectedDevice.status] }}
+                      >
+                        {selectedDevice.status.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-4 border-t border-cyan-500/10 pt-3">
+                    <div className="text-[10px] text-gray-500 mb-2" style={{ fontFamily: 'var(--font-data)' }}>
+                      INTERFACES
+                    </div>
+                    <div className="space-y-1">
+                      {['Gi0/0', 'Gi0/1', 'Gi0/2', 'Gi0/3'].map((iface) => (
+                        <div key={iface} className="flex items-center justify-between rounded border border-cyan-500/10 px-3 py-1.5">
+                          <span className="text-[10px] text-gray-300" style={{ fontFamily: 'var(--font-data)' }}>{iface}</span>
+                          <span className="text-[10px] text-green-400" style={{ fontFamily: 'var(--font-data)' }}>UP</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {isActive('activity') && (
           <div className="h-full w-full flex items-center justify-center pointer-events-none">
-            <div className="cyber-panel rounded-lg p-8 text-center pointer-events-auto">
+            <div className="hud-panel rounded-lg p-8 text-center pointer-events-auto">
               <Activity size={48} className="text-cyber-accent mx-auto mb-4" />
               <h2 className="text-2xl font-bold cyber-text mb-2">ACTIVITY</h2>
               <p className="text-cyber-muted">Live activity feed coming soon...</p>
@@ -164,7 +740,7 @@ export default function DashboardPage() {
 
         {isActive('settings') && (
           <div className="h-full w-full flex items-center justify-center pointer-events-none">
-            <div className="cyber-panel rounded-lg p-8 text-center pointer-events-auto">
+            <div className="hud-panel rounded-lg p-8 text-center pointer-events-auto">
               <Settings size={48} className="text-cyber-accent mx-auto mb-4" />
               <h2 className="text-2xl font-bold cyber-text mb-2">SETTINGS</h2>
               <p className="text-cyber-muted">System configuration panel coming soon...</p>
@@ -172,46 +748,150 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {isActive('layers') && (
-          <div className="h-full w-full flex items-center justify-center pointer-events-none">
-            <div className="cyber-panel rounded-lg p-8 text-center pointer-events-auto">
-              <Layers size={48} className="text-cyber-accent mx-auto mb-4" />
-              <h2 className="text-2xl font-bold cyber-text mb-2">LAYERS</h2>
-              <p className="text-cyber-muted">Layer controls coming soon...</p>
+        <div className={`absolute right-4 top-24 z-30 w-72 right-widget-panel ${isActive('layers') ? 'is-active' : ''}`}>
+          <div className="hud-panel rounded-lg p-4">
+            <h3 className="text-sm font-bold text-cyan-400 mb-3 tracking-wider">LAYERS</h3>
+            <div className="space-y-2">
+              {['Devices', 'Arcs', 'Grid', 'Heatmap', 'Satellite'].map((layer) => (
+                <label key={layer} className="flex items-center justify-between text-xs text-cyber-muted cursor-pointer">
+                  <span>{layer}</span>
+                  <input type="checkbox" defaultChecked className="accent-cyan-400" />
+                </label>
+              ))}
             </div>
           </div>
-        )}
+        </div>
 
-        {isActive('analytics') && (
-          <div className="h-full w-full flex items-center justify-center pointer-events-none">
-            <div className="cyber-panel rounded-lg p-8 text-center pointer-events-auto">
-              <BarChart3 size={48} className="text-cyber-accent mx-auto mb-4" />
-              <h2 className="text-2xl font-bold cyber-text mb-2">ANALYTICS</h2>
-              <p className="text-cyber-muted">Analytics dashboard coming soon...</p>
+        <div className={`absolute right-4 top-24 z-30 w-80 right-widget-panel ${isActive('analytics') ? 'is-active' : ''}`}>
+          <div className="hud-panel rounded-lg p-4">
+            <h3 className="text-sm font-bold text-cyan-400 mb-3 tracking-wider">ANALYTICS</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded border border-cyan-500/20 p-3 text-center">
+                <div className="text-xl font-bold text-white">1,284</div>
+                <div className="text-[10px] text-cyber-muted">REQUESTS</div>
+              </div>
+              <div className="rounded border border-cyan-500/20 p-3 text-center">
+                <div className="text-xl font-bold text-white">98.4%</div>
+                <div className="text-[10px] text-cyber-muted">UPTIME</div>
+              </div>
+              <div className="rounded border border-cyan-500/20 p-3 text-center">
+                <div className="text-xl font-bold text-white">23ms</div>
+                <div className="text-[10px] text-cyber-muted">LATENCY</div>
+              </div>
+              <div className="rounded border border-cyan-500/20 p-3 text-center">
+                <div className="text-xl font-bold text-white">14</div>
+                <div className="text-[10px] text-cyber-muted">ALERTS</div>
+              </div>
             </div>
           </div>
-        )}
+        </div>
 
-        {isActive('threats') && (
-          <div className="h-full w-full flex items-center justify-center pointer-events-none">
-            <div className="cyber-panel rounded-lg p-8 text-center pointer-events-auto">
-              <Shield size={48} className="text-cyber-accent mx-auto mb-4" />
-              <h2 className="text-2xl font-bold cyber-text mb-2">THREATS</h2>
-              <p className="text-cyber-muted">Threat monitoring coming soon...</p>
+        <div className={`absolute right-4 top-24 z-30 w-80 right-widget-panel ${isActive('threats') ? 'is-active' : ''}`}>
+          <div className="hud-panel rounded-lg p-4">
+            <h3 className="text-sm font-bold text-cyan-400 mb-3 tracking-wider">THREATS</h3>
+            <div className="space-y-2">
+              {[
+                { title: 'Brute force', severity: 'high' },
+                { title: 'Port scan', severity: 'medium' },
+                { title: 'Anomaly', severity: 'low' },
+                { title: 'Malware sig', severity: 'medium' },
+              ].map((threat) => (
+                <div key={threat.title} className="flex items-center justify-between rounded border border-cyan-500/10 px-3 py-2">
+                  <span className="text-xs text-white">{threat.title}</span>
+                  <span className={`text-[10px] font-bold uppercase ${
+                    threat.severity === 'high' ? 'text-red-400' :
+                    threat.severity === 'medium' ? 'text-orange-400' : 'text-green-400'
+                  }`}>{threat.severity}</span>
+                </div>
+              ))}
             </div>
           </div>
-        )}
+        </div>
 
-        {isActive('live') && (
-          <div className="h-full w-full flex items-center justify-center pointer-events-none">
-            <div className="cyber-panel rounded-lg p-8 text-center pointer-events-auto">
-              <Radio size={48} className="text-cyber-accent mx-auto mb-4" />
-              <h2 className="text-2xl font-bold cyber-text mb-2">LIVE FEEDS</h2>
-              <p className="text-cyber-muted">Live feeds coming soon...</p>
+        <div className={`absolute right-4 top-24 z-30 w-80 right-widget-panel ${isActive('live') ? 'is-active' : ''}`}>
+          <div className="hud-panel rounded-lg p-4">
+            <h3 className="text-sm font-bold text-cyan-400 mb-3 tracking-wider">LIVE FEEDS</h3>
+            <div className="space-y-2">
+              {[
+                'New device registered: nyc-dc-07',
+                'Interface flapping: Gi0/1',
+                'BGP peer down: 192.168.1.1',
+                'CPU spike: 94% on router-02',
+                'Backup completed successfully',
+              ].map((item) => (
+                <div key={item} className="rounded border border-cyan-500/10 px-3 py-2 text-xs text-cyber-muted">
+                  {item}
+                </div>
+              ))}
             </div>
           </div>
-        )}
+        </div>
       </main>
+
+      {showNetworkModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowNetworkModal(false)} />
+          <div className="hud-panel border border-cyan-500/30 rounded-xl p-5 w-[90vw] max-w-4xl max-h-[85vh] relative flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-sm font-bold text-cyan-300 tracking-wider">ORGANIZED NETWORK</h2>
+                <p className="text-[10px] text-cyber-muted" style={{ fontFamily: 'var(--font-data)' }}>
+                  {activeSite ?? 'ALL SITES'} · {topologyType.toUpperCase()} TOPOLOGY
+                </p>
+              </div>
+              <button
+                onClick={() => setShowNetworkModal(false)}
+                className="flex h-8 w-8 items-center justify-center rounded border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/10"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto pr-1 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {(activeSite ? siteDevices : filteredDevices).map((device) => {
+                  const type = getDeviceType(device)
+                  return (
+                    <div
+                      key={device.id}
+                      className="rounded border border-cyan-500/20 bg-black/30 p-3 hover:border-cyan-400/40 hover:bg-cyan-500/5 transition-colors cursor-pointer"
+                      onClick={() => {
+                        handleSelectDevice(device)
+                        setShowNetworkModal(false)
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-semibold text-cyan-300" style={{ fontFamily: 'var(--font-data)' }}>
+                          {type.toUpperCase()}
+                        </span>
+                        <span
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded"
+                          style={{
+                            fontFamily: 'var(--font-data)',
+                            backgroundColor: `${STATUS_COLOR[device.status]}20`,
+                            color: STATUS_COLOR[device.status],
+                          }}
+                        >
+                          {device.status.toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-200 mb-1" style={{ fontFamily: 'var(--font-data)' }}>
+                        {device.hostname}
+                      </div>
+                      <div className="text-[10px] text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>
+                        {device.ip}
+                      </div>
+                      <div className="text-[10px] text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>
+                        {device.vendor} {device.model}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+    </>
   )
 }
