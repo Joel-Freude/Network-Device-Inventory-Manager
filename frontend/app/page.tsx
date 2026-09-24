@@ -495,7 +495,7 @@ export default function DashboardPage() {
       const has = prev.includes(key)
 
       if (isLeft) {
-        return [key]
+        return [key, ...prev.filter((k) => RIGHT_WIDGET_KEYS.includes(k))]
       }
 
       if (has) {
@@ -553,29 +553,36 @@ export default function DashboardPage() {
       </div>
 
       {/* Floating right tools rail */}
-      <nav className="fixed right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-3 z-40">
+      <nav className="fixed right-[12rem] top-4 z-40 flex items-center gap-3">
         {([
           ['layers', 'layers', Layers],
           ['analytics', 'analytics', BarChart3],
           ['threats', 'threats', Shield],
           ['live', 'live', Radio],
-        ] as const).map(([pageKey, widgetKey, Icon]) => (
-          <button
-            key={pageKey}
-            onClick={() => toggleWidget(widgetKey)}
-            className={`group relative w-10 h-10 flex items-center justify-center rounded-full transition-all ${
-              isActive(widgetKey)
-                ? 'text-cyan-400 bg-cyan-500/20 shadow-[0_0_15px_rgba(0,212,255,0.4)]'
-                : 'text-gray-400 hover:text-white hover:bg-cyan-500/10'
-            }`}
-            title={WIDGET_LABELS[widgetKey]}
-          >
-            <Icon size={20} />
-            <span className="absolute right-full mr-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 border border-gray-700">
-              {WIDGET_LABELS[widgetKey]}
-            </span>
-          </button>
-        ))}
+        ] as const).map(([pageKey, widgetKey, Icon]) => {
+          const active = isActive(widgetKey)
+          return (
+            <button
+              key={pageKey}
+              onClick={() => toggleWidget(widgetKey)}
+              className={`flex items-center gap-2 rounded-full transition-all ${
+                active
+                  ? 'text-cyan-400 bg-cyan-500/20 shadow-[0_0_15px_rgba(0,212,255,0.4)]'
+                  : 'text-gray-400 hover:text-white hover:bg-cyan-500/10'
+              }`}
+              title={WIDGET_LABELS[widgetKey]}
+            >
+              {active && (
+                <span className="text-[10px] font-semibold tracking-wider text-cyan-300 whitespace-nowrap" style={{ fontFamily: 'var(--font-data)' }}>
+                  {WIDGET_LABELS[widgetKey]}
+                </span>
+              )}
+              <span className="flex h-10 w-10 items-center justify-center rounded-full">
+                <Icon size={20} />
+              </span>
+            </button>
+          )
+        })}
       </nav>
 
       {/* Main content */}
@@ -863,7 +870,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className={`absolute right-[10em] top-24 z-30 w-80 right-widget-panel ${isActive('analytics') ? 'is-active' : ''}`}>
+        <div className={`absolute right-[1em] top-24 z-30 w-80 right-widget-panel ${isActive('analytics') ? 'is-active' : ''}`}>
           <div className="hud-panel rounded-lg p-4">
             <h3 className="text-sm font-bold text-cyan-400 mb-3 tracking-wider">ANALYTICS</h3>
             <div className="space-y-3">
