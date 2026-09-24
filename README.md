@@ -16,7 +16,9 @@ An enterprise-grade, single-source-of-truth web application designed for Network
 * **Centralized Asset Management:** Full CRUD (Create, Read, Update, Delete) operations for network devices including Routers, Switches, Firewalls, Access Points, and Servers[cite: 1].
 * **Network Data Validation:** Built-in IPv4/IPv6 string validation and automatic MAC address normalization (`XX:XX:XX:XX:XX:XX`)[cite: 1].
 * **Relational Location Mapping:** Track device placement by sites, buildings, and specific server racks[cite: 1].
-* **Real-time Analytics Dashboard:** Visual breakdowns of network inventory by vendor, operational status (Active, Offline, Maintenance), and device role[cite: 1].
+* **Real-time Analytics Dashboard:** Live performance metrics with waveform visualization, CPU/MEM/TEMP/LAT monitoring, and bandwidth tracking.
+* **Interactive Network Topology:** Visual SVG-based topology widget with datacenter navigation, status filtering, and clickable device nodes.
+* **Organized Network Modal:** Split-view modal with network topology on the left and device details on the right, including Update, Delete, and New Device actions.
 * **Automated API Documentation:** Interactive OpenAPI/Swagger docs generated directly by FastAPI[cite: 1].
 
 ---
@@ -51,6 +53,27 @@ This repository strictly adheres to a structured development methodology[cite: 1
 
 ---
 
+## Interface & Functional Updates
+
+### Analytics Widget
+- Live signal waveform visualization with real-time updates.
+- Dynamic CPU, Memory, Temperature, and Latency metrics with progress bars.
+- Bandwidth in/out monitoring with simulated live data.
+
+### Network Topology Widget
+- SVG-based topology visualization with support for Star, Bus, Ring, Mesh, Tree, and Hybrid layouts.
+- Datacenter navigation with arrow buttons.
+- Status filtering (All, Online, Warning, Offline).
+- Clickable device nodes that trigger selection.
+
+### Organized Network Modal
+- Left panel: Full network topology widget with datacenter arrows, status filters, and clickable device icons.
+- Right panel: Selected device details including hostname, IP, vendor, model, site, coordinates, and status.
+- Action buttons: Update, Delete, and New Device.
+- Tree topology layout with Parent Node, Level 1, and Level 2 device tiers.
+
+---
+
 ## Getting Started (Local Development)
 
 ### Prerequisites
@@ -59,10 +82,10 @@ This repository strictly adheres to a structured development methodology[cite: 1
 
 ### Installation
 1. Clone the repository:
-   ```bash
-   git clone [https://github.com/Joel-Freude/Network-Device-Inventory-Manager.git](https://github.com/Joel-Freude/Network-Device-Inventory-Manager.git)
-   cd Network-Device-Inventory-Manager
-   
+    ```bash
+    git clone [https://github.com/Joel-Freude/Network-Device-Inventory-Manager.git](https://github.com/Joel-Freude/Network-Device-Inventory-Manager.git)
+    cd Network-Device-Inventory-Manager
+    
 2. Start the application stack using Docker Compose:
 
 ```bash

@@ -863,7 +863,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className={`absolute right-4 top-24 z-30 w-80 right-widget-panel ${isActive('analytics') ? 'is-active' : ''}`}>
+        <div className={`absolute right-[10em] top-24 z-30 w-80 right-widget-panel ${isActive('analytics') ? 'is-active' : ''}`}>
           <div className="hud-panel rounded-lg p-4">
             <h3 className="text-sm font-bold text-cyan-400 mb-3 tracking-wider">ANALYTICS</h3>
             <div className="space-y-3">
@@ -876,7 +876,7 @@ export default function DashboardPage() {
                     points={waveformHistory.map((y, i) => `${(i / (waveformHistory.length - 1)) * 320},${y}`).join(' ')}
                   />
                 </svg>
-                <div className="absolute top-2 left-2 text-[10px] text-cyan-300" style={{ fontFamily: 'var(--font-data)' }}>HEARTBEAT</div>
+                <div className="absolute top-2 left-2 text-[10px] text-cyan-300" style={{ fontFamily: 'var(--font-data)' }}>LIVE SIGNAL</div>
                 <div className="absolute bottom-2 right-2 text-[10px] text-gray-400" style={{ fontFamily: 'var(--font-data)' }}>LIVE</div>
               </div>
               <div className="grid grid-cols-2 gap-2">
