@@ -83,6 +83,33 @@ export default function DashboardPage() {
   const [modalSelectedDevice, setModalSelectedDevice] = useState<Device | null>(null)
   const [analyticsMetrics, setAnalyticsMetrics] = useState({ cpu: 50, mem: 60, temp: 40, lat: 12, inBw: 50, outBw: 35 })
   const [waveformHistory, setWaveformHistory] = useState<number[]>(Array.from({ length: 60 }, () => 50))
+  const [activities, setActivities] = useState<{ id: string; message: string; severity: 'high' | 'medium' | 'low'; timestamp: string }[]>([])
+  const [activityFilter, setActivityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all')
+  const [acknowledgedActivities, setAcknowledgedActivities] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const saved = localStorage.getItem('activeWidgets')
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as WidgetKey[]
+        if (Array.isArray(parsed)) setActiveWidgets(parsed)
+      } catch {}
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem('activeWidgets', JSON.stringify(activeWidgets))
+  }, [activeWidgets])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveWidgets((prev) => prev.filter((k) => !RIGHT_WIDGET_KEYS.includes(k)))
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   useEffect(() => {
     if (!activeWidgets.includes('network')) return
@@ -126,6 +153,29 @@ export default function DashboardPage() {
         return nextHistory
       })
     }, 800)
+    return () => clearInterval(interval)
+  }, [activeWidgets])
+
+  useEffect(() => {
+    if (!activeWidgets.includes('activity')) return
+    const events = [
+      { message: 'New device registered: nyc-dc-07', severity: 'low' as const },
+      { message: 'Interface flapping: Gi0/1', severity: 'medium' as const },
+      { message: 'BGP peer down: 192.168.1.1', severity: 'high' as const },
+      { message: 'CPU spike: 94% on router-02', severity: 'high' as const },
+      { message: 'Backup completed successfully', severity: 'low' as const },
+      { message: 'Firmware upgrade: core-sw-nyc01', severity: 'medium' as const },
+      { message: 'High latency detected: 120ms', severity: 'medium' as const },
+      { message: 'Port security violation: Gi0/3', severity: 'high' as const },
+      { message: 'Syslog rotation completed', severity: 'low' as const },
+      { message: 'Temperature warning: 72°C', severity: 'medium' as const },
+    ]
+    const interval = setInterval(() => {
+      const event = events[Math.floor(Math.random() * events.length)]
+      const now = new Date()
+      const timestamp = now.toLocaleTimeString('en-US', { hour12: false })
+      setActivities((prev) => [...prev.slice(-200), { id: `${timestamp}-${Math.random()}`, message: event.message, severity: event.severity, timestamp }])
+    }, 2500)
     return () => clearInterval(interval)
   }, [activeWidgets])
 
@@ -587,7 +637,7 @@ export default function DashboardPage() {
 
       {/* Main content */}
       <main className="flex-1 relative overflow-hidden">
-        <GlobeMap flyToLocation={flyToLocation} />
+        <GlobeMap flyToLocation={flyToLocation} selectedDevice={selectedDevice} selectedSite={selectedSite} />
 
         {isActive('dashboard') && (
           <>
@@ -837,11 +887,85 @@ export default function DashboardPage() {
         )}
 
         {isActive('activity') && (
-          <div className="h-full w-full flex items-center justify-center pointer-events-none">
-            <div className="hud-panel rounded-lg p-8 text-center pointer-events-auto">
-              <Activity size={48} className="text-cyber-accent mx-auto mb-4" />
-              <h2 className="text-2xl font-bold cyber-text mb-2">ACTIVITY</h2>
-              <p className="text-cyber-muted">Live activity feed coming soon...</p>
+          <div className="absolute left-4 top-24 z-30 flex flex-col gap-4 w-[420px]">
+            <div className="hud-panel border border-cyan-500/30 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="text-sm font-bold text-cyan-300 tracking-wider">FEEDS</h2>
+                  <p className="text-[10px] text-cyber-muted" style={{ fontFamily: 'var(--font-data)' }}>
+                    {activities.length} EVENTS · {activities.filter((a) => a.severity === 'high').length} HIGH · {activities.filter((a) => a.severity === 'medium').length} MEDIUM · {activities.filter((a) => a.severity === 'low').length} LOW
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  {(['all', 'high', 'medium', 'low'] as const).map((severity) => (
+                    <button
+                      key={severity}
+                      onClick={() => setActivityFilter(severity)}
+                      className={`px-2 py-1 rounded border text-[10px] transition-colors ${
+                        activityFilter === severity
+                          ? 'border-cyan-400/60 text-cyan-300 bg-cyan-500/10'
+                          : 'border-cyan-500/10 text-gray-400 hover:text-white'
+                      }`}
+                      style={{ fontFamily: 'var(--font-data)' }}
+                    >
+                      {severity.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="max-h-[260px] overflow-y-auto space-y-2 pr-1 performance-scroll">
+                {activities
+                  .filter((activity) => activityFilter === 'all' || activity.severity === activityFilter)
+                  .map((activity) => {
+                    const isAcknowledged = acknowledgedActivities.has(activity.id)
+                    return (
+                      <div
+                        key={activity.id}
+                        className={`flex items-start justify-between gap-3 rounded border px-3 py-2 transition-colors ${
+                          isAcknowledged ? 'border-cyan-500/10 opacity-60' : 'border-cyan-500/20'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span
+                              className="text-[10px] font-semibold px-2 py-0.5 rounded"
+                              style={{
+                                fontFamily: 'var(--font-data)',
+                                backgroundColor: activity.severity === 'high' ? '#ff475720' : activity.severity === 'medium' ? '#ff9f4320' : '#00ff9d20',
+                                color: activity.severity === 'high' ? '#ff4757' : activity.severity === 'medium' ? '#ff9f43' : '#00ff9d',
+                              }}
+                            >
+                              {activity.severity.toUpperCase()}
+                            </span>
+                            <span className="text-[10px] text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>{activity.timestamp}</span>
+                          </div>
+                          <div className="text-xs text-gray-200" style={{ fontFamily: 'var(--font-data)' }}>{activity.message}</div>
+                        </div>
+                        {!isAcknowledged && (
+                          <button
+                            onClick={() => setAcknowledgedActivities((prev) => new Set(prev).add(activity.id))}
+                            className="text-[10px] text-cyan-300 hover:text-white whitespace-nowrap"
+                            style={{ fontFamily: 'var(--font-data)' }}
+                          >
+                            ACK
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                {activities.length === 0 && (
+                  <div className="text-xs text-gray-500 text-center py-8" style={{ fontFamily: 'var(--font-data)' }}>
+                    NO ACTIVITY EVENTS YET
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setActivities([])}
+                className="mt-3 w-full rounded border border-cyan-500/20 px-3 py-2 text-xs text-cyan-300 hover:bg-cyan-500/10"
+                style={{ fontFamily: 'var(--font-data)' }}
+              >
+                CLEAR ALL
+              </button>
             </div>
           </div>
         )}
@@ -857,8 +981,12 @@ export default function DashboardPage() {
         )}
 
         <div className={`absolute right-4 top-24 z-30 w-72 right-widget-panel ${isActive('layers') ? 'is-active' : ''}`}>
+          <div className="absolute -inset-4" onClick={() => toggleWidget('layers')} />
           <div className="hud-panel rounded-lg p-4">
-            <h3 className="text-sm font-bold text-cyan-400 mb-3 tracking-wider">LAYERS</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-cyan-400 tracking-wider">LAYERS</h3>
+              <button onClick={() => toggleWidget('layers')} className="text-[10px] text-gray-400 hover:text-white">CLOSE</button>
+            </div>
             <div className="space-y-2">
               {['Devices', 'Arcs', 'Grid', 'Heatmap', 'Satellite'].map((layer) => (
                 <label key={layer} className="flex items-center justify-between text-xs text-cyber-muted cursor-pointer">
@@ -871,8 +999,12 @@ export default function DashboardPage() {
         </div>
 
         <div className={`absolute right-[1em] top-24 z-30 w-80 right-widget-panel ${isActive('analytics') ? 'is-active' : ''}`}>
+          <div className="absolute -inset-4" onClick={() => toggleWidget('analytics')} />
           <div className="hud-panel rounded-lg p-4">
-            <h3 className="text-sm font-bold text-cyan-400 mb-3 tracking-wider">ANALYTICS</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-cyan-400 tracking-wider">ANALYTICS</h3>
+              <button onClick={() => toggleWidget('analytics')} className="text-[10px] text-gray-400 hover:text-white">CLOSE</button>
+            </div>
             <div className="space-y-3">
               <div className="relative h-24 rounded border border-cyan-500/20 bg-black/20 overflow-hidden">
                 <svg className="absolute inset-0 w-full h-full" viewBox="0 0 320 100" preserveAspectRatio="none">
@@ -918,8 +1050,12 @@ export default function DashboardPage() {
         </div>
 
         <div className={`absolute right-4 top-24 z-30 w-80 right-widget-panel ${isActive('threats') ? 'is-active' : ''}`}>
+          <div className="absolute -inset-4" onClick={() => toggleWidget('threats')} />
           <div className="hud-panel rounded-lg p-4">
-            <h3 className="text-sm font-bold text-cyan-400 mb-3 tracking-wider">THREATS</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-cyan-400 tracking-wider">THREATS</h3>
+              <button onClick={() => toggleWidget('threats')} className="text-[10px] text-gray-400 hover:text-white">CLOSE</button>
+            </div>
             <div className="space-y-2">
               {[
                 { title: 'Brute force', severity: 'high' },
@@ -940,8 +1076,12 @@ export default function DashboardPage() {
         </div>
 
         <div className={`absolute right-4 top-24 z-30 w-80 right-widget-panel ${isActive('live') ? 'is-active' : ''}`}>
+          <div className="absolute -inset-4" onClick={() => toggleWidget('live')} />
           <div className="hud-panel rounded-lg p-4">
-            <h3 className="text-sm font-bold text-cyan-400 mb-3 tracking-wider">LIVE FEEDS</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-cyan-400 tracking-wider">LIVE FEEDS</h3>
+              <button onClick={() => toggleWidget('live')} className="text-[10px] text-gray-400 hover:text-white">CLOSE</button>
+            </div>
             <div className="space-y-2">
               {[
                 'New device registered: nyc-dc-07',

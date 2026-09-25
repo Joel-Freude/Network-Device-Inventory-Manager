@@ -148,6 +148,8 @@ interface GlobeMapProps {
   showDayNight?: boolean;
   onProjectionChange?: (mode: ProjectionMode) => void;
   flyToLocation?: { lat: number; lng: number; site?: string } | null;
+  selectedDevice?: Device | null;
+  selectedSite?: string | null;
 }
 
 export default function GlobeMap({
@@ -155,6 +157,8 @@ export default function GlobeMap({
   showDayNight = true,
   onProjectionChange,
   flyToLocation,
+  selectedDevice,
+  selectedSite,
 }: GlobeMapProps) {
   const mapRef = useRef<MapRef>(null);
   const overlayRef = useRef<MapboxOverlay | null>(null);
@@ -170,6 +174,7 @@ export default function GlobeMap({
   const previousFlyToRef = useRef<{ lat: number; lng: number; site?: string } | null>(null);
   const [isFlying, setIsFlying] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
+  const pulseRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -316,14 +321,14 @@ export default function GlobeMap({
       if (typeof (map as any).easeTo === 'function') {
         (map as any).easeTo({
           center: [currentLng, currentLat],
-          zoom: 8,
+          zoom: 3,
           bearing: 0,
           pitch: 0,
           duration: 4500,
           essential: true,
         });
       } else {
-        map.setZoom(8);
+        map.setZoom(3);
         handleStep1End();
       }
 
@@ -452,6 +457,32 @@ export default function GlobeMap({
     };
   }, [ready, projection, isFlying, isInteracting]);
 
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !ready || !selectedDevice) return;
+
+    const layerId = 'selected-device-circle';
+    if (!map.getLayer(layerId)) return;
+
+    let phase = 0;
+    const animate = () => {
+      phase += 0.05;
+      const radius = 10 + Math.sin(phase) * 4;
+      const opacity = 0.2 + Math.sin(phase) * 0.15;
+      map.setPaintProperty(layerId, 'circle-radius', radius);
+      map.setPaintProperty(layerId, 'circle-opacity', opacity);
+      pulseRef.current = requestAnimationFrame(animate);
+    };
+
+    pulseRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (pulseRef.current) {
+        cancelAnimationFrame(pulseRef.current);
+        pulseRef.current = null;
+      }
+    };
+  }, [ready, selectedDevice?.id]);
+
   const scaleBar = computeScaleBar(view.zoom, view.lat);
   const onlineCount = devices.filter((d) => d.status === 'online').length;
 
@@ -483,25 +514,36 @@ export default function GlobeMap({
                    14,
                    8,
                  ],
-                 'circle-color': [
-                   'case',
-                   ['==', ['get', 'site'], 'New York DC'],
-                   '#ff4757',
-                   ['==', ['get', 'status'], 'online'],
-                   STATUS_COLOR.online,
-                   ['==', ['get', 'status'], 'warning'],
-                   STATUS_COLOR.warning,
-                   ['==', ['get', 'status'], 'offline'],
-                   STATUS_COLOR.offline,
-                   '#00ff9d',
-                 ],
+                 'circle-color': '#00d4ff',
                 'circle-stroke-width': 2,
                 'circle-stroke-color': '#0a0a0f',
                 'circle-opacity': 0.95,
               }}
             />
-          </Source>
-        </Map>
+           </Source>
+           {selectedDevice && (
+             <Source id="selected-device" type="geojson" data={{
+               type: 'FeatureCollection',
+               features: [{
+                 type: 'Feature',
+                 geometry: { type: 'Point', coordinates: [selectedDevice.lng, selectedDevice.lat] },
+                 properties: {},
+               }],
+             }}>
+               <Layer
+                 id="selected-device-circle"
+                 type="circle"
+                 paint={{
+                   'circle-radius': 12,
+                   'circle-color': '#00d4ff',
+                   'circle-stroke-width': 2,
+                   'circle-stroke-color': '#0a0a0f',
+                   'circle-opacity': 0.3,
+                 }}
+               />
+             </Source>
+           )}
+         </Map>
 
         <div
           className="hud-panel"

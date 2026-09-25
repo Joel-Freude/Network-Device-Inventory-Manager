@@ -240,6 +240,14 @@
 .performance-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0, 212, 255, 0.45); }
 .performance-scroll { scrollbar-width: thin; scrollbar-color: rgba(0, 212, 255, 0.25) rgba(0, 212, 255, 0.05); }
 
+@keyframes ring-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.08); }
+}
+.pulse-ring {
+  animation: ring-pulse 1.4s ease-in-out infinite;
+}
+
 /* ------------------------------------------------------------------ */
 /* Device markers + popup                                              */
 /* ------------------------------------------------------------------ */

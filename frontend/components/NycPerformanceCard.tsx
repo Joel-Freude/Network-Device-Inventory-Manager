@@ -17,7 +17,7 @@ interface Device {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
-function ProgressRing({ percent, size = 64, strokeWidth = 6 }: { percent: number; size?: number; strokeWidth?: number }) {
+function ProgressRing({ percent, size = 64, strokeWidth = 6, active }: { percent: number; size?: number; strokeWidth?: number; active?: boolean }) {
   const radius = size / 2 - strokeWidth
   const circumference = 2 * Math.PI * radius
   const center = size / 2
@@ -30,7 +30,13 @@ function ProgressRing({ percent, size = 64, strokeWidth = 6 }: { percent: number
   else if (clamped < 70) color = '#ff9f43'
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className={active ? 'pulse-ring' : ''}
+      style={active ? { animation: 'ring-pulse 1.4s ease-in-out infinite', transformOrigin: 'center' } : undefined}
+    >
       <circle cx={center} cy={center} r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={strokeWidth} />
       <circle
         cx={center}
@@ -174,7 +180,7 @@ export default function NycPerformanceCard({ onLocationSelect, onOpenAddModal }:
                 onClick={() => toggleSite(site.site, site.lat, site.lng)}
                 className={`flex items-center gap-4 w-full text-left rounded-lg p-2 -mx-2 transition-colors ${isSelected ? 'bg-cyan-500/10' : 'hover:bg-cyan-500/5'}`}
               >
-                <ProgressRing percent={onlinePercent} size={64} strokeWidth={6} />
+                <ProgressRing percent={onlinePercent} size={64} strokeWidth={6} active={isSelected} />
                 <div className="flex flex-col gap-2 min-w-0 flex-1">
                   <div className="text-sm font-semibold text-cyan-300 truncate" style={{ fontFamily: 'var(--font-data)' }}>
                     {site.site}
