@@ -22,10 +22,30 @@ const STATUS_COLOR: Record<Device['status'], string> = {
   offline: '#ff4757',
 }
 
+function useResponsiveItemCount(itemHeight = 64, headerHeight = 48, maxItems = 20) {
+  const [visibleItems, setVisibleItems] = useState(4)
+
+  useEffect(() => {
+    const updateCount = () => {
+      const viewportHeight = window.innerHeight
+      const availableHeight = viewportHeight - 600
+      const calculated = Math.floor(availableHeight / itemHeight)
+      setVisibleItems(Math.max(4, Math.min(4, calculated)))
+    }
+
+    updateCount()
+    window.addEventListener('resize', updateCount)
+    return () => window.removeEventListener('resize', updateCount)
+  }, [itemHeight, headerHeight, maxItems])
+
+  return visibleItems
+}
+
 export default function DeviceList({ site }: { site: string | null }) {
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const visibleItems = devices.length
 
   useEffect(() => {
     if (!site) return
@@ -73,13 +93,15 @@ export default function DeviceList({ site }: { site: string | null }) {
     )
   }
 
+  const visibleDevices = devices
+
   return (
     <div className="hud-panel border border-cyan-500/30 rounded-lg p-5 w-[380px]">
       <div className="text-xs font-semibold text-cyan-300 mb-3" style={{ fontFamily: 'var(--font-data)' }}>
         DEVICES — {site}
       </div>
-      <div className="flex flex-col gap-2">
-        {devices.map((device) => (
+      <div className="flex flex-col gap-2 overflow-y-auto performance-scroll" style={{ maxHeight: '200px' }}>
+        {visibleDevices.map((device) => (
           <div
             key={device.id}
             className="flex items-center justify-between border-b border-cyan-500/10 pb-2 last:border-0 last:pb-0"

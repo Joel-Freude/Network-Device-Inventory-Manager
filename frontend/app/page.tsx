@@ -79,6 +79,7 @@ export default function DashboardPage() {
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
   const [selectedSiteForTopology, setSelectedSiteForTopology] = useState<string | null>(null)
   const [showDeviceList, setShowDeviceList] = useState(false)
+  const deviceListVisibleItems = 4
   const [showNetworkModal, setShowNetworkModal] = useState(false)
   const [modalSelectedDevice, setModalSelectedDevice] = useState<Device | null>(null)
   const [analyticsMetrics, setAnalyticsMetrics] = useState({ cpu: 50, mem: 60, temp: 40, lat: 12, inBw: 50, outBw: 35 })
@@ -86,6 +87,7 @@ export default function DashboardPage() {
   const [activities, setActivities] = useState<{ id: string; message: string; severity: 'high' | 'medium' | 'low'; timestamp: string }[]>([])
   const [activityFilter, setActivityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all')
   const [acknowledgedActivities, setAcknowledgedActivities] = useState<Set<string>>(new Set())
+  const [deviceHealth, setDeviceHealth] = useState({ cpu: 50, ram: 50, upload: 50, download: 50, overall: 50 })
 
   useEffect(() => {
     const saved = localStorage.getItem('activeWidgets')
@@ -178,6 +180,21 @@ export default function DashboardPage() {
     }, 2500)
     return () => clearInterval(interval)
   }, [activeWidgets])
+
+  useEffect(() => {
+    if (!selectedDevice) return
+    const interval = setInterval(() => {
+      setDeviceHealth((prev) => {
+        const cpu = Math.max(5, Math.min(95, prev.cpu + (Math.random() - 0.5) * 20))
+        const ram = Math.max(10, Math.min(90, prev.ram + (Math.random() - 0.5) * 15))
+        const upload = Math.max(10, Math.min(95, prev.upload + (Math.random() - 0.5) * 18))
+        const download = Math.max(10, Math.min(95, prev.download + (Math.random() - 0.5) * 18))
+        const overall = Math.max(10, Math.min(95, (cpu + ram + upload + download) / 4))
+        return { cpu, ram, upload, download, overall }
+      })
+    }, 1200)
+    return () => clearInterval(interval)
+  }, [selectedDevice?.id])
 
   const filteredDevices = devices.filter((device) => {
     const matchesSearch =
@@ -646,7 +663,7 @@ export default function DashboardPage() {
                 setFlyToLocation(coords)
                 setSelectedSite(coords?.site ?? null)
               }} onOpenAddModal={() => setIsAddModalOpen(true)} />
-              {selectedSite && <DeviceList site={selectedSite} />}
+               {selectedSite && <DeviceList key={selectedSite} site={selectedSite} />}
             </div>
             <AddDatacenterModal
               isOpen={isAddModalOpen}
@@ -735,9 +752,9 @@ export default function DashboardPage() {
                        <text x="50%" y="50%" textAnchor="middle" fill="#6b7280" fontSize="10" style={{ fontFamily: 'var(--font-data)' }}>
                          NO DEVICES FOR THIS SITE
                        </text>
-                     ) : (
-                        renderTopology('glow')
-                     )}
+                      ) : (
+                         renderTopology('glow', setSelectedDevice)
+                      )}
                    </svg>
                  </div>
                 <button
@@ -749,72 +766,147 @@ export default function DashboardPage() {
                   style={{ fontFamily: 'var(--font-data)' }}
                 >
                   ORGANIZE NETWORK
-                </button>
-               </div>
+                 </button>
+                </div>
 
-              {showDeviceList && (
-                <div key={activeSite ?? 'all'} className="hud-panel rounded-lg p-4">
-                  <div className="text-xs font-semibold text-cyan-300 mb-3" style={{ fontFamily: 'var(--font-data)' }}>
-                    DEVICES — {activeSite ?? 'ALL SITES'}
-                  </div>
-                  <div className="max-h-[180px] overflow-y-auto pr-1">
-                    {devicesLoading && (
-                      <div className="flex flex-col gap-2">
-                        {[1, 2, 3].map((i) => (
-                          <div key={i} className="flex items-center gap-3 animate-pulse">
-                            <div className="h-4 w-24 bg-cyan-500/10 rounded" />
-                            <div className="h-3 w-16 bg-cyan-500/10 rounded" />
-                          </div>
-                        ))}
+                {selectedDevice && (
+                  <div className="hud-panel border border-cyan-500/30 rounded-lg p-4">
+                    <div className="text-xs font-semibold text-cyan-300 mb-3" style={{ fontFamily: 'var(--font-data)' }}>
+                      DEVICE PERFORMANCE
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-shrink-0">
+                        <svg width="80" height="80" viewBox="0 0 80 80">
+                          <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
+                          <circle
+                            cx="40"
+                            cy="40"
+                            r="32"
+                            fill="none"
+                            stroke="#00d4ff"
+                            strokeWidth="6"
+                            strokeDasharray={`${(deviceHealth.overall / 100) * 201} 201`}
+                            transform="rotate(-90 40 40)"
+                            strokeLinecap="round"
+                          />
+                          <text x="40" y="40" textAnchor="middle" dy="0.35em" fill="#e8e6de" fontSize="16" fontWeight="700" fontFamily="var(--font-data)">
+                            {Math.round(deviceHealth.overall)}%
+                          </text>
+                        </svg>
                       </div>
-                    )}
-                    {devicesError && (
-                      <div className="text-xs text-red-400">Failed to load devices</div>
-                    )}
-                    {!devicesLoading && !devicesError && (
-                      <div className="flex flex-col gap-1">
-                        {(activeSite ? siteDevices : filteredDevices).map((device) => {
-                          const isSelected = selectedDevice?.id === device.id
-                          return (
-                            <button
-                              key={device.id}
-                              onClick={() => handleSelectDevice(device)}
-                              className={`w-full text-left rounded border px-3 py-2 transition-colors ${
-                                isSelected
-                                  ? 'border-cyan-400/40 bg-cyan-500/10'
-                                  : 'border-cyan-500/10 hover:border-cyan-400/30 hover:bg-cyan-500/5'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-gray-200" style={{ fontFamily: 'var(--font-data)' }}>
-                                  {device.hostname}
-                                </span>
-                                <span
-                                  className="text-[10px] font-semibold px-2 py-0.5 rounded"
-                                  style={{
-                                    fontFamily: 'var(--font-data)',
-                                    backgroundColor: `${STATUS_COLOR[device.status]}20`,
-                                    color: STATUS_COLOR[device.status],
-                                  }}
-                                >
-                                  {device.status.toUpperCase()}
-                                </span>
-                              </div>
-                              <div className="mt-1 flex items-center justify-between text-[10px] text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>
-                                <span>{device.ip}</span>
-                                <span>{device.site}</span>
-                              </div>
-                            </button>
-                          )
-                        })}
-                        {(activeSite ? siteDevices : filteredDevices).length === 0 && (
-                          <div className="text-xs text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>
-                            No matching devices.
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-gray-200 truncate" style={{ fontFamily: 'var(--font-data)' }}>
+                          {selectedDevice.hostname}
+                        </div>
+                        <div className="text-[10px] text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>
+                          {selectedDevice.site}
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          <div>
+                            <div className="flex items-center justify-between text-[10px] mb-1" style={{ fontFamily: 'var(--font-data)' }}>
+                              <span className="text-gray-500">CPU</span>
+                              <span className="text-gray-300">{Math.round(deviceHealth.cpu)}%</span>
+                            </div>
+                            <div className="h-1 bg-cyan-500/10 rounded overflow-hidden">
+                              <div className="h-full rounded bg-cyan-400 transition-all" style={{ width: `${deviceHealth.cpu}%` }} />
+                            </div>
                           </div>
-                        )}
+                          <div>
+                            <div className="flex items-center justify-between text-[10px] mb-1" style={{ fontFamily: 'var(--font-data)' }}>
+                              <span className="text-gray-500">RAM</span>
+                              <span className="text-gray-300">{Math.round(deviceHealth.ram)}%</span>
+                            </div>
+                            <div className="h-1 bg-cyan-500/10 rounded overflow-hidden">
+                              <div className="h-full rounded bg-cyan-400 transition-all" style={{ width: `${deviceHealth.ram}%` }} />
+                            </div>
+                          </div>
+                           <div>
+                             <div className="flex items-center justify-between text-[10px] mb-1" style={{ fontFamily: 'var(--font-data)' }}>
+                               <span className="text-gray-500">UPLOAD</span>
+                               <span className="text-gray-300">{Math.round(deviceHealth.upload)}%</span>
+                             </div>
+                             <div className="h-1 bg-cyan-500/10 rounded overflow-hidden">
+                               <div className="h-full rounded bg-cyan-400 transition-all" style={{ width: `${deviceHealth.upload}%` }} />
+                             </div>
+                           </div>
+                           <div>
+                             <div className="flex items-center justify-between text-[10px] mb-1" style={{ fontFamily: 'var(--font-data)' }}>
+                               <span className="text-gray-500">DOWNLOAD</span>
+                               <span className="text-gray-300">{Math.round(deviceHealth.download)}%</span>
+                             </div>
+                             <div className="h-1 bg-cyan-500/10 rounded overflow-hidden">
+                               <div className="h-full rounded bg-cyan-400 transition-all" style={{ width: `${deviceHealth.download}%` }} />
+                             </div>
+                           </div>
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
+                )}
+
+                {showDeviceList && (
+                 <div key={activeSite ?? 'all'} className="hud-panel rounded-lg p-4">
+                   <div className="text-xs font-semibold text-cyan-300 mb-3" style={{ fontFamily: 'var(--font-data)' }}>
+                     DEVICES — {activeSite ?? 'ALL SITES'}
+                   </div>
+                    <div className="max-h-[220px] overflow-y-auto pr-1 performance-scroll">
+                     {devicesLoading && (
+                       <div className="flex flex-col gap-2">
+                         {[1, 2, 3].map((i) => (
+                           <div key={i} className="flex items-center gap-3 animate-pulse">
+                             <div className="h-4 w-24 bg-cyan-500/10 rounded" />
+                             <div className="h-3 w-16 bg-cyan-500/10 rounded" />
+                           </div>
+                         ))}
+                       </div>
+                     )}
+                     {devicesError && (
+                       <div className="text-xs text-red-400">Failed to load devices</div>
+                     )}
+                     {!devicesLoading && !devicesError && (
+                       <div className="flex flex-col gap-1">
+                         {(activeSite ? siteDevices : filteredDevices).map((device) => {
+                           const isSelected = selectedDevice?.id === device.id
+                           return (
+                             <button
+                               key={device.id}
+                               onClick={() => handleSelectDevice(device)}
+                               className={`w-full text-left rounded border px-3 py-2 transition-colors ${
+                                 isSelected
+                                   ? 'border-cyan-400/40 bg-cyan-500/10'
+                                   : 'border-cyan-500/10 hover:border-cyan-400/30 hover:bg-cyan-500/5'
+                               }`}
+                             >
+                               <div className="flex items-center justify-between">
+                                 <span className="text-xs text-gray-200" style={{ fontFamily: 'var(--font-data)' }}>
+                                   {device.hostname}
+                                 </span>
+                                 <span
+                                   className="text-[10px] font-semibold px-2 py-0.5 rounded"
+                                   style={{
+                                     fontFamily: 'var(--font-data)',
+                                     backgroundColor: `${STATUS_COLOR[device.status]}20`,
+                                     color: STATUS_COLOR[device.status],
+                                   }}
+                                 >
+                                   {device.status.toUpperCase()}
+                                 </span>
+                               </div>
+                               <div className="mt-1 flex items-center justify-between text-[10px] text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>
+                                 <span>{device.ip}</span>
+                                 <span>{device.site}</span>
+                               </div>
+                             </button>
+                           )
+                         })}
+                         {(activeSite ? siteDevices : filteredDevices).length === 0 && (
+                           <div className="text-xs text-gray-500" style={{ fontFamily: 'var(--font-data)' }}>
+                             No matching devices.
+                           </div>
+                         )}
+                       </div>
+                     )}
+                   </div>
                 </div>
               )}
             </div>

@@ -308,7 +308,7 @@ export default function GlobeMap({
             });
           } else {
             map.setCenter(nextCenter);
-            map.setZoom(18);
+            map.setZoom(3);
             map.setBearing(0);
             map.setPitch(20);
             handleFinalMoveEnd();
@@ -321,7 +321,7 @@ export default function GlobeMap({
       if (typeof (map as any).easeTo === 'function') {
         (map as any).easeTo({
           center: [currentLng, currentLat],
-          zoom: 3,
+          zoom: 8,
           bearing: 0,
           pitch: 0,
           duration: 4500,
@@ -343,7 +343,7 @@ export default function GlobeMap({
     if (typeof (map as any).easeTo === 'function') {
       (map as any).easeTo({
         center: nextCenter,
-        zoom: 15,
+        zoom: 8,
         bearing: 0,
         pitch: 20,
         duration: 4500,
@@ -351,7 +351,7 @@ export default function GlobeMap({
       });
     } else {
       map.setCenter(nextCenter);
-      map.setZoom(15);
+      map.setZoom(3);
       map.setBearing(0);
       map.setPitch(20);
       handleMoveEnd();
@@ -457,20 +457,31 @@ export default function GlobeMap({
     };
   }, [ready, projection, isFlying, isInteracting]);
 
+  const selectedDeviceRef = useRef(selectedDevice);
+  const selectedSiteRef = useRef(selectedSite);
+  useEffect(() => { selectedDeviceRef.current = selectedDevice }, [selectedDevice]);
+  useEffect(() => { selectedSiteRef.current = selectedSite }, [selectedSite]);
+
   useEffect(() => {
     const map = mapRef.current?.getMap();
-    if (!map || !ready || !selectedDevice) return;
+    if (!map || !ready) return;
 
-    const layerId = 'selected-device-circle';
-    if (!map.getLayer(layerId)) return;
+    const deviceLayerId = 'selected-device-circle';
+    const siteLayerId = 'selected-site-circle';
 
     let phase = 0;
     const animate = () => {
       phase += 0.05;
       const radius = 10 + Math.sin(phase) * 4;
       const opacity = 0.2 + Math.sin(phase) * 0.15;
-      map.setPaintProperty(layerId, 'circle-radius', radius);
-      map.setPaintProperty(layerId, 'circle-opacity', opacity);
+      if (selectedDeviceRef.current && map.getLayer(deviceLayerId)) {
+        map.setPaintProperty(deviceLayerId, 'circle-radius', radius);
+        map.setPaintProperty(deviceLayerId, 'circle-opacity', opacity);
+      }
+      if (selectedSiteRef.current && map.getLayer(siteLayerId)) {
+        map.setPaintProperty(siteLayerId, 'circle-radius', radius);
+        map.setPaintProperty(siteLayerId, 'circle-opacity', opacity);
+      }
       pulseRef.current = requestAnimationFrame(animate);
     };
 
@@ -481,7 +492,7 @@ export default function GlobeMap({
         pulseRef.current = null;
       }
     };
-  }, [ready, selectedDevice?.id]);
+  }, [ready]);
 
   const scaleBar = computeScaleBar(view.zoom, view.lat);
   const onlineCount = devices.filter((d) => d.status === 'online').length;
@@ -521,29 +532,53 @@ export default function GlobeMap({
               }}
             />
            </Source>
-           {selectedDevice && (
-             <Source id="selected-device" type="geojson" data={{
-               type: 'FeatureCollection',
-               features: [{
-                 type: 'Feature',
-                 geometry: { type: 'Point', coordinates: [selectedDevice.lng, selectedDevice.lat] },
-                 properties: {},
-               }],
-             }}>
-               <Layer
-                 id="selected-device-circle"
-                 type="circle"
-                 paint={{
-                   'circle-radius': 12,
-                   'circle-color': '#00d4ff',
-                   'circle-stroke-width': 2,
-                   'circle-stroke-color': '#0a0a0f',
-                   'circle-opacity': 0.3,
-                 }}
-               />
-             </Source>
-           )}
-         </Map>
+            {selectedDevice && (
+              <Source id="selected-device" type="geojson" data={{
+                type: 'FeatureCollection',
+                features: [{
+                  type: 'Feature',
+                  geometry: { type: 'Point', coordinates: [selectedDevice.lng, selectedDevice.lat] },
+                  properties: {},
+                }],
+              }}>
+                <Layer
+                  id="selected-device-circle"
+                  type="circle"
+                  paint={{
+                    'circle-radius': 12,
+                    'circle-color': '#00d4ff',
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#0a0a0f',
+                    'circle-opacity': 0.3,
+                  }}
+                />
+              </Source>
+            )}
+            {selectedSite && (
+              <Source id="selected-site" type="geojson" data={{
+                type: 'FeatureCollection',
+                features: devices
+                  .filter((d) => d.site === selectedSite)
+                  .map((device) => ({
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [device.lng, device.lat] },
+                    properties: {},
+                  })),
+              }}>
+                <Layer
+                  id="selected-site-circle"
+                  type="circle"
+                  paint={{
+                    'circle-radius': 16,
+                    'circle-color': '#00d4ff',
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#0a0a0f',
+                    'circle-opacity': 0.25,
+                  }}
+                />
+              </Source>
+            )}
+          </Map>
 
         <div
           className="hud-panel"
